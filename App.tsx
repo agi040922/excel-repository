@@ -17,6 +17,12 @@ const ImageIcon = () => (
   </svg>
 );
 
+const PdfIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-red-500">
+    <path fillRule="evenodd" d="M5.625 1.5H9a.375.375 0 0 1 .375.375v1.875c0 1.036.84 1.875 1.875 1.875H12.975c.207 0 .375.168.375.375v16.5c0 1.035-.84 1.875-1.875 1.875H6a.375.375 0 0 1-.375-.375V1.5Zm5.5 1.5v2h3a.75.75 0 0 0-.75-.75h-2.25Zm1.125 7.5a.75.75 0 0 0 0 1.5h1.5a.75.75 0 0 0 0-1.5h-1.5ZM9 12.75a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5H9Zm0 3a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5H9Z" clipRule="evenodd" />
+  </svg>
+);
+
 const App: React.FC = () => {
   const [step, setStep] = useState<AppStep>(AppStep.UPLOAD_TEMPLATE);
   const [columns, setColumns] = useState<ExcelColumn[]>([]);
@@ -70,9 +76,6 @@ const App: React.FC = () => {
             header: h,
             key: h.toLowerCase().replace(/\s/g, '_')
           }));
-          // Only overwrite columns if we didn't load from template, or allow user to merge?
-          // For simplicity, if user uploads a sample here, we prioritize the sample but keep existing as backup?
-          // Better: just set columns to what AI found.
           setColumns(cols);
           
           setItems([{
@@ -86,17 +89,6 @@ const App: React.FC = () => {
         } finally {
           setIsAnalyzingSample(false);
         }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleReferenceImageUpload = (files: File[]) => {
-    const file = files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setSampleImage(e.target?.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -118,8 +110,6 @@ const App: React.FC = () => {
     newColumns[index] = {
       ...newColumns[index],
       header: newName,
-      // We keep the key same or update it? Updating key might break mapping if we already had data, 
-      // but here we are in definition phase so it's fine.
       key: newName.toLowerCase().replace(/\s/g, '_')
     };
     setColumns(newColumns);
@@ -225,6 +215,9 @@ const App: React.FC = () => {
     setTemplateFile(null);
     setSampleImage(null);
   };
+
+  // Helper to detect if file is PDF
+  const isPdf = (base64: string) => base64.startsWith('data:application/pdf');
 
   // Render Helpers
   const renderStepIndicator = () => (
@@ -333,12 +326,19 @@ const App: React.FC = () => {
               </div>
 
               <div className={`grid grid-cols-1 ${sampleImage ? 'md:grid-cols-2' : ''} gap-8`}>
-                 {/* Left: Image Preview (Only if sample uploaded or we want to allow sample upload) */}
-                 {/* If template file exists, we might not NEED a sample image immediately, but user can still upload one to test */}
-                 
+                 {/* Left: Image/PDF Preview */}
                  <div className={`border border-slate-200 rounded-xl p-4 bg-white h-fit sticky top-20 ${!sampleImage ? 'hidden' : 'block'}`}>
-                    <h3 className="font-semibold text-slate-700 mb-2">Sample Image</h3>
-                    {sampleImage && <img src={sampleImage} alt="sample" className="w-full h-auto rounded-lg shadow-sm" />}
+                    <h3 className="font-semibold text-slate-700 mb-2">Sample Document</h3>
+                    {sampleImage && (
+                       isPdf(sampleImage) ? (
+                         <div className="w-full aspect-[3/4] bg-slate-100 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200">
+                            <PdfIcon />
+                            <span className="text-sm text-slate-500 mt-2">PDF Document</span>
+                         </div>
+                       ) : (
+                         <img src={sampleImage} alt="sample" className="w-full h-auto rounded-lg shadow-sm" />
+                       )
+                    )}
                  </div>
 
                  {/* Right: Field Editor */}
@@ -353,7 +353,7 @@ const App: React.FC = () => {
                             onClick={() => document.getElementById('sample-upload')?.click()}
                             className="text-sm text-excel-600 hover:text-excel-700 font-medium"
                           >
-                             + Auto-detect from Image
+                             + Auto-detect from Image/PDF
                           </button>
                       )}
                       {/* Hidden input for sample upload trigger */}
@@ -361,7 +361,7 @@ const App: React.FC = () => {
                          type="file" 
                          id="sample-upload" 
                          className="hidden" 
-                         accept="image/*"
+                         accept="image/*,application/pdf"
                          onChange={(e) => e.target.files && handleSampleUpload([e.target.files[0]])}
                       />
                     </div>
@@ -452,7 +452,7 @@ const App: React.FC = () => {
                   <div>
                     <h2 className="text-2xl font-bold text-slate-900">Upload Data Sources</h2>
                     <p className="text-slate-500">
-                       Upload remaining images. We will extract multiple rows per image if tables are detected.
+                       Upload images or PDFs. We will extract multiple rows per document if tables are detected.
                     </p>
                   </div>
                   {items.length > 0 && (
@@ -478,10 +478,10 @@ const App: React.FC = () => {
 
                <FileUploader 
                   onUpload={handleImageUpload} 
-                  accept="image/*" 
+                  accept="image/*,application/pdf" 
                   multiple={true}
-                  title="Drop images here" 
-                  subtitle="Supports JPG, PNG, WEBP (Blurry images accepted)"
+                  title="Drop images or PDFs here" 
+                  subtitle="Supports JPG, PNG, WEBP, PDF (Blurry images accepted)"
                   icon={<ImageIcon />}
                 />
 
@@ -489,7 +489,14 @@ const App: React.FC = () => {
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-8">
                     {items.map((item) => (
                       <div key={item.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-white shadow-sm">
-                        <img src={item.originalImage} alt="upload" className="w-full h-full object-cover" />
+                        {isPdf(item.originalImage) ? (
+                           <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 p-4">
+                              <PdfIcon />
+                              <span className="text-xs font-medium text-slate-500 mt-2 text-center truncate w-full">Document</span>
+                           </div>
+                        ) : (
+                           <img src={item.originalImage} alt="upload" className="w-full h-full object-cover" />
+                        )}
                         
                         {/* Status Overlay */}
                         {item.status === 'pending' && (
@@ -567,14 +574,22 @@ const App: React.FC = () => {
                                   {/* Only show image on first row of the item */}
                                   {rowIndex === 0 && (
                                      <div className="relative group cursor-pointer w-12 h-12">
-                                        <img 
-                                          src={item.originalImage} 
-                                          className="w-12 h-12 object-cover rounded border border-slate-200"
-                                          alt="source"
-                                        />
-                                        <div className="hidden group-hover:block absolute left-14 top-0 z-50 w-64 p-1 bg-white border border-slate-200 shadow-xl rounded-lg">
-                                          <img src={item.originalImage} className="w-full h-auto rounded" alt="preview" />
-                                        </div>
+                                        {isPdf(item.originalImage) ? (
+                                           <div className="w-12 h-12 bg-slate-100 rounded border border-slate-200 flex items-center justify-center">
+                                              <span className="text-[10px] font-bold text-red-500">PDF</span>
+                                           </div>
+                                        ) : (
+                                          <>
+                                            <img 
+                                              src={item.originalImage} 
+                                              className="w-12 h-12 object-cover rounded border border-slate-200"
+                                              alt="source"
+                                            />
+                                            <div className="hidden group-hover:block absolute left-14 top-0 z-50 w-64 p-1 bg-white border border-slate-200 shadow-xl rounded-lg">
+                                              <img src={item.originalImage} className="w-full h-auto rounded" alt="preview" />
+                                            </div>
+                                          </>
+                                        )}
                                      </div>
                                   )}
                                 </td>

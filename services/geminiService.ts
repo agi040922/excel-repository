@@ -13,28 +13,43 @@ const getAiClient = () => {
 };
 
 /**
- * Step 1: Analyze a sample image to identify potential columns/headers.
+ * Helper to parse base64 data
+ */
+const parseBase64 = (base64Data: string) => {
+  const match = base64Data.match(/^data:(.*);base64,(.*)$/);
+  if (!match) {
+    throw new Error("Invalid base64 data");
+  }
+  return {
+    mimeType: match[1],
+    data: match[2]
+  };
+};
+
+/**
+ * Step 1: Analyze a sample image/pdf to identify potential columns/headers.
  */
 export const identifyColumnsFromImage = async (imageBase64: string): Promise<string[]> => {
   const ai = getAiClient();
-  const cleanBase64 = imageBase64.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
-
-  const prompt = `
-    Analyze this image and identify the distinct data fields that would make good spreadsheet headers.
-    
-    Rules:
-    1. Look for labels like "Date", "Invoice #", "Vendor", "Total Amount", "Tax", "Items", etc.
-    2. If the image contains a table, identify the column headers of that table.
-    3. Return a JSON ARRAY of strings. e.g. ["Date", "Description", "Qty", "Unit Price", "Total"].
-    4. Keep header names concise and clear.
-  `;
-
+  
   try {
+    const { mimeType, data } = parseBase64(imageBase64);
+
+    const prompt = `
+      Analyze this document and identify the distinct data fields that would make good spreadsheet headers.
+      
+      Rules:
+      1. Look for labels like "Date", "Invoice #", "Vendor", "Total Amount", "Tax", "Items", etc.
+      2. If the document contains a table, identify the column headers of that table.
+      3. Return a JSON ARRAY of strings. e.g. ["Date", "Description", "Qty", "Unit Price", "Total"].
+      4. Keep header names concise and clear.
+    `;
+
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: {
         parts: [
-          { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
+          { inlineData: { mimeType, data } },
           { text: prompt }
         ]
       },
@@ -64,42 +79,43 @@ export const extractDataFromImage = async (
   columns: ExcelColumn[]
 ): Promise<Record<string, string | number>[]> => {
   const ai = getAiClient();
-  const cleanBase64 = imageBase64.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
-
-  const headers = columns.map(c => c.header);
-  
-  const prompt = `
-    Extract ALL data rows from this image strictly matching these headers: ${JSON.stringify(headers)}.
-    
-    Rules:
-    1. Return a JSON ARRAY of objects. Each object represents one row of data.
-    2. If the image contains a table with multiple items, extract EACH item as a separate object.
-    3. If the image contains a single form, return an array with one object.
-    4. Keys must match the headers EXACTLY.
-    5. If a field is not found, use an empty string "".
-    6. For date fields, use YYYY-MM-DD format.
-    7. For numeric fields, return numbers (remove currency symbols like $ or ,).
-  `;
-
-  // Dynamic strict schema: Array of Objects
-  const responseSchema = {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: columns.reduce((acc, col) => {
-        acc[col.header] = { type: Type.STRING }; 
-        return acc;
-      }, {} as Record<string, any>),
-      required: headers,
-    }
-  };
 
   try {
+    const { mimeType, data } = parseBase64(imageBase64);
+    
+    const headers = columns.map(c => c.header);
+    
+    const prompt = `
+      Extract ALL data rows from this document strictly matching these headers: ${JSON.stringify(headers)}.
+      
+      Rules:
+      1. Return a JSON ARRAY of objects. Each object represents one row of data.
+      2. If the document contains a table with multiple items, extract EACH item as a separate object.
+      3. If the document contains a single form, return an array with one object.
+      4. Keys must match the headers EXACTLY.
+      5. If a field is not found, use an empty string "".
+      6. For date fields, use YYYY-MM-DD format.
+      7. For numeric fields, return numbers (remove currency symbols like $ or ,).
+    `;
+
+    // Dynamic strict schema: Array of Objects
+    const responseSchema = {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: columns.reduce((acc, col) => {
+          acc[col.header] = { type: Type.STRING }; 
+          return acc;
+        }, {} as Record<string, any>),
+        required: headers,
+      }
+    };
+
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: {
         parts: [
-          { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
+          { inlineData: { mimeType, data } },
           { text: prompt }
         ]
       },
