@@ -1,0 +1,5 @@
+{
+  "name": "Excel Vision AI",
+  "description": "Automate data entry from blurry photos directly into your Excel templates using Gemini Flash AI.",
+  "requestFramePermissions": []
+}
