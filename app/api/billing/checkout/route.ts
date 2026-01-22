@@ -94,8 +94,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Return checkout URL
+    const checkoutUrl = checkout.data?.data.attributes.url;
+    console.log('✅ Checkout URL:', checkoutUrl);
     return successResponse({
-      checkoutUrl: checkout.data?.data.attributes.url,
+      checkoutUrl,
     });
   } catch (error) {
     return handleApiError(error, 'billing/checkout');

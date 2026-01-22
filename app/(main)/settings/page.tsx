@@ -89,13 +89,13 @@ export default function SettingsPage() {
         body: JSON.stringify({ variantId: plan.variantId }),
       });
 
-      const data = await response.json();
+      const result = await response.json();
 
-      if (data.checkoutUrl) {
+      if (result.success && result.data?.checkoutUrl) {
         // Redirect to LemonSqueezy checkout
-        window.location.href = data.checkoutUrl;
+        window.location.href = result.data.checkoutUrl;
       } else {
-        alert('체크아웃 생성에 실패했습니다.');
+        alert(result.error?.message || '체크아웃 생성에 실패했습니다.');
       }
     } catch (error) {
       console.error('Error creating checkout:', error);
@@ -117,13 +117,13 @@ export default function SettingsPage() {
         body: JSON.stringify({ variantId: pack.variantId }),
       });
 
-      const data = await response.json();
+      const result = await response.json();
 
-      if (data.checkoutUrl) {
+      if (result.success && result.data?.checkoutUrl) {
         // Redirect to LemonSqueezy checkout
-        window.location.href = data.checkoutUrl;
+        window.location.href = result.data.checkoutUrl;
       } else {
-        alert('체크아웃 생성에 실패했습니다.');
+        alert(result.error?.message || '체크아웃 생성에 실패했습니다.');
       }
     } catch (error) {
       console.error('Error creating checkout:', error);
