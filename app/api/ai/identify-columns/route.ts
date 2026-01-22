@@ -54,8 +54,14 @@ export async function POST(request: NextRequest) {
 
     const { imageBase64, model } = validation.data;
 
+    // 디버깅: MIME 타입 확인
+    const mimeMatch = imageBase64.match(/^data:([^;]+);base64,/);
+    console.log('[identify-columns] MIME type:', mimeMatch ? mimeMatch[1] : 'unknown');
+    console.log('[identify-columns] Data length:', imageBase64.length);
+
     // Use Vercel AI Gateway
     const columns = await identifyColumnsWithAI(imageBase64, model);
+    console.log('[identify-columns] Result columns:', columns);
 
     // Deduct credit after successful identification
     await deductCredits(user.id, 1);

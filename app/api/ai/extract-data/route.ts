@@ -54,8 +54,15 @@ export async function POST(request: NextRequest) {
 
     const { imageBase64, columns, model } = validation.data;
 
+    // 디버깅: MIME 타입 확인
+    const mimeMatch = imageBase64.match(/^data:([^;]+);base64,/);
+    console.log('[extract-data] MIME type:', mimeMatch ? mimeMatch[1] : 'unknown');
+    console.log('[extract-data] Columns:', columns.map(c => c.header));
+
     // Use Vercel AI Gateway
     const data = await extractDataWithAI(imageBase64, columns, model);
+    console.log('[extract-data] Result rows:', data.length);
+    console.log('[extract-data] First row sample:', JSON.stringify(data[0], null, 2));
 
     // Deduct credit after successful extraction
     await deductCredits(user.id, 1);

@@ -19,25 +19,26 @@ import { ExcelColumn } from '../types';
  * Step 1: Analyze a sample image/pdf to identify potential columns/headers.
  */
 export const identifyColumnsFromImage = async (imageBase64: string): Promise<string[]> => {
-  try {
-    const response = await fetch('/api/ai/identify-columns', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ imageBase64 }),
+  const response = await fetch('/api/ai/identify-columns', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ imageBase64 }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    console.error('identify-columns API error:', {
+      status: response.status,
+      statusText: response.statusText,
+      error: errorData
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to identify columns');
-    }
-
-    const { columns } = await response.json();
-    return columns || ["Date", "Description", "Amount"];
-  } catch (error) {
-    console.error("Column Identification Error:", error);
-    return ["Date", "Description", "Amount"];
+    throw new Error(`Failed to identify columns: ${response.status} - ${errorData.message || response.statusText}`);
   }
+
+  const { data } = await response.json();
+  return data?.columns || ["Date", "Description", "Amount"];
 };
 
 /**
@@ -47,25 +48,26 @@ export const extractDataFromImage = async (
   imageBase64: string,
   columns: ExcelColumn[]
 ): Promise<Record<string, string | number>[]> => {
-  try {
-    const response = await fetch('/api/ai/extract-data', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ imageBase64, columns }),
+  const response = await fetch('/api/ai/extract-data', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ imageBase64, columns }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    console.error('extract-data API error:', {
+      status: response.status,
+      statusText: response.statusText,
+      error: errorData
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to extract data');
-    }
-
-    const { data } = await response.json();
-    return data || [];
-  } catch (error) {
-    console.error("Gemini Extraction Error:", error);
-    return [];
+    throw new Error(`Failed to extract data: ${response.status} - ${errorData.message || response.statusText}`);
   }
+
+  const result = await response.json();
+  return result.data?.data || [];
 };
 
 /**
@@ -89,11 +91,22 @@ export const detectHeaderRow = async (
     });
 
     if (!response.ok) {
-      throw new Error('Failed to detect header row');
+      const errorData = await response.json().catch(() => ({}));
+      console.error('detect-header API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorData
+      });
+      throw new Error(`Failed to detect header row: ${response.status} - ${errorData.message || response.statusText}`);
     }
 
     const result = await response.json();
-    return result || { headerRowIndex: 1, headers: [], confidence: 0 };
+    const apiData = result.data || {};
+    return {
+      headerRowIndex: apiData.headerRow || 1,
+      headers: apiData.headers || [],
+      confidence: apiData.confidence || 0
+    };
   } catch (error) {
     console.error("Header Detection Error:", error);
     return { headerRowIndex: 1, headers: [], confidence: 0 };

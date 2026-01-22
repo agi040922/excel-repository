@@ -7,15 +7,15 @@
 import { z } from 'zod';
 
 /**
- * Base64 image validation
- * Validates that the string is a valid base64 data URI
+ * Base64 document validation
+ * Validates that the string is a valid base64 data URI for images or PDFs
  */
-const base64ImageSchema = z
+const base64DocumentSchema = z
   .string()
-  .min(1, 'Image data is required')
+  .min(1, 'Document data is required')
   .regex(
-    /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/,
-    'Invalid base64 image format. Expected data:image/[type];base64,...'
+    /^data:(image\/(png|jpeg|jpg|webp|gif)|application\/pdf);base64,[A-Za-z0-9+/=]+$/,
+    'Invalid base64 format. Expected image (png, jpeg, webp, gif) or PDF'
   );
 
 /**
@@ -42,7 +42,7 @@ export const aiModelSchema = z.enum([
  * Detect header request schema
  */
 export const detectHeaderRequestSchema = z.object({
-  imageBase64: base64ImageSchema,
+  imageBase64: base64DocumentSchema,
   model: aiModelSchema.optional(),
 });
 
@@ -50,7 +50,7 @@ export const detectHeaderRequestSchema = z.object({
  * Identify columns request schema
  */
 export const identifyColumnsRequestSchema = z.object({
-  imageBase64: base64ImageSchema,
+  imageBase64: base64DocumentSchema,
   model: aiModelSchema.optional(),
 });
 
@@ -58,7 +58,7 @@ export const identifyColumnsRequestSchema = z.object({
  * Extract data request schema
  */
 export const extractDataRequestSchema = z.object({
-  imageBase64: base64ImageSchema,
+  imageBase64: base64DocumentSchema,
   columns: z
     .array(excelColumnSchema)
     .min(1, 'At least one column is required')

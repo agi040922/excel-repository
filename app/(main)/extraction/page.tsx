@@ -39,6 +39,7 @@ export default function ExtractionPage() {
 
   const [sampleImage, setSampleImage] = useState<string | null>(null);
   const [isAnalyzingSample, setIsAnalyzingSample] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
   const [headerDetection, setHeaderDetection] = useState<{
     headerRowIndex: number;
     confidence: number;
@@ -78,19 +79,34 @@ export default function ExtractionPage() {
         setSampleImage(base64);
         setIsAnalyzingSample(true);
 
-        try {
-          // 병렬로 헤더 감지 및 컬럼 식별 실행
-          const [headerResult, detectedHeaders] = await Promise.all([
-            detectHeaderRow(base64),
-            identifyColumnsFromImage(base64)
-          ]);
+        // PDF인지 확인 (헤더 행 감지는 Excel 이미지에만 필요)
+        const isPdf = file.type === 'application/pdf' || base64.startsWith('data:application/pdf');
 
-          // 헤더 감지 결과 저장
-          if (headerResult.confidence > 0) {
-            setHeaderDetection({
-              headerRowIndex: headerResult.headerRowIndex,
-              confidence: headerResult.confidence
-            });
+        setSampleError(null);
+
+        try {
+          let detectedHeaders: string[];
+
+          if (isPdf) {
+            // PDF는 컬럼 식별만 수행 (헤더 행 감지 불필요)
+            detectedHeaders = await identifyColumnsFromImage(base64);
+            setHeaderDetection(null);
+          } else {
+            // 이미지는 병렬로 헤더 감지 및 컬럼 식별 실행
+            const [headerResult, headers] = await Promise.all([
+              detectHeaderRow(base64),
+              identifyColumnsFromImage(base64)
+            ]);
+
+            detectedHeaders = headers;
+
+            // 헤더 감지 결과 저장
+            if (headerResult.confidence > 0) {
+              setHeaderDetection({
+                headerRowIndex: headerResult.headerRowIndex,
+                confidence: headerResult.confidence
+              });
+            }
           }
 
           const cols = detectedHeaders.map(h => ({
@@ -105,8 +121,9 @@ export default function ExtractionPage() {
             data: [],
             status: 'pending'
           }]);
-        } catch {
-          // Error during sample analysis
+        } catch (error) {
+          console.error('Sample analysis error:', error);
+          setSampleError(error instanceof Error ? error.message : 'Failed to analyze document');
         } finally {
           setIsAnalyzingSample(false);
         }
@@ -161,6 +178,7 @@ export default function ExtractionPage() {
           columns={columns}
           sampleImage={sampleImage}
           isAnalyzingSample={isAnalyzingSample}
+          sampleError={sampleError}
           newColumnName={newColumnName}
           templateFile={templateFile}
           onSampleUpload={handleSampleUpload}
@@ -171,6 +189,7 @@ export default function ExtractionPage() {
           onCloseSample={() => {
             setSampleImage(null);
             setHeaderDetection(null);
+            setSampleError(null);
           }}
           setNewColumnName={setNewColumnName}
           headerDetection={headerDetection || undefined}

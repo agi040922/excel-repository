@@ -20,6 +20,43 @@ export function getModel(modelId: AIModel = DEFAULT_MODEL) {
   return gateway(modelId);
 }
 
+// base64 data URI에서 MIME 타입과 데이터 추출
+function parseDataUri(dataUri: string): { mimeType: string; data: string } | null {
+  const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  return { mimeType: match[1], data: match[2] };
+}
+
+// 파일 타입에 따라 적절한 content part 생성
+function createContentPart(dataUri: string) {
+  const parsed = parseDataUri(dataUri);
+
+  // 디버깅 로그
+  console.log('[createContentPart] parsed:', parsed ? { mimeType: parsed.mimeType, dataLength: parsed.data.length } : null);
+
+  if (!parsed) {
+    // fallback: 그냥 이미지로 처리
+    console.log('[createContentPart] fallback to image type');
+    return { type: 'image' as const, image: dataUri };
+  }
+
+  const { mimeType, data } = parsed;
+
+  // PDF는 file 타입으로 처리 (mediaType 필수)
+  if (mimeType === 'application/pdf') {
+    console.log('[createContentPart] using file type for PDF');
+    return {
+      type: 'file' as const,
+      data: Buffer.from(data, 'base64'),
+      mediaType: mimeType
+    };
+  }
+
+  // 이미지는 image 타입으로 처리
+  console.log('[createContentPart] using image type for:', mimeType);
+  return { type: 'image' as const, image: dataUri };
+}
+
 // 컬럼 감지
 export async function identifyColumnsWithAI(
   imageBase64: string,
@@ -35,6 +72,7 @@ export async function identifyColumnsWithAI(
     2. If the document contains a table, identify the column headers of that table.
     3. Return a JSON array of strings. e.g. ["Date", "Description", "Qty", "Unit Price", "Total"].
     4. Keep header names concise and clear.
+    5. IMPORTANT: Preserve the original language of the headers. If the document is in Korean, return Korean headers. If in English, return English headers. Do NOT translate.
   `;
 
   const schema = z.object({
@@ -49,7 +87,7 @@ export async function identifyColumnsWithAI(
         role: 'user' as const,
         content: [
           { type: 'text', text: prompt },
-          { type: 'image', image: imageBase64 }
+          createContentPart(imageBase64)
         ]
       }
     ]
@@ -78,10 +116,15 @@ export async function extractDataWithAI(
     5. If a field is not found, use an empty string "".
     6. For date fields, use YYYY-MM-DD format.
     7. For numeric fields, return numbers (remove currency symbols like $ or ,).
+    8. IMPORTANT: Preserve the original language of the data. Do NOT translate any text values.
   `;
 
-  // Dynamic schema based on columns
-  const rowSchema = z.record(z.string(), z.string());
+  // Dynamic schema based on columns - 정확한 키를 강제
+  const rowShape: Record<string, z.ZodString> = {};
+  headers.forEach(header => {
+    rowShape[header] = z.string().describe(`Value for ${header}`);
+  });
+  const rowSchema = z.object(rowShape);
   const schema = z.object({
     data: z.array(rowSchema).describe('Array of extracted data rows')
   });
@@ -94,7 +137,7 @@ export async function extractDataWithAI(
         role: 'user' as const,
         content: [
           { type: 'text', text: prompt },
-          { type: 'image', image: imageBase64 }
+          createContentPart(imageBase64)
         ]
       }
     ]
@@ -133,7 +176,7 @@ export async function detectHeaderRowWithAI(
         role: 'user' as const,
         content: [
           { type: 'text', text: prompt },
-          { type: 'image', image: imageBase64 }
+          createContentPart(imageBase64)
         ]
       }
     ]
