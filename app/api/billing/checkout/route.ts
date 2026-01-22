@@ -54,6 +54,16 @@ export async function POST(request: NextRequest) {
 
     const { variantId } = validation.data;
 
+    // Convert variantId to number (LemonSqueezy SDK requires number)
+    const variantIdNumber = parseInt(variantId, 10);
+    if (isNaN(variantIdNumber)) {
+      return errorResponse(
+        ErrorCodes.VALIDATION_ERROR,
+        'Invalid variant ID',
+        400
+      );
+    }
+
     // Get user profile for email
     const { data: profile } = await supabase
       .from('profiles')
@@ -65,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     // Create checkout session
     const storeId = getStoreId();
-    const checkout = await createCheckout(storeId, variantId, {
+    const checkout = await createCheckout(storeId, variantIdNumber, {
       checkoutData: {
         email: email || undefined,
         custom: {
