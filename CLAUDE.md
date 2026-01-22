@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Excel Vision AI - A production-ready Next.js 15 SaaS application that automates data entry from blurry photos/documents directly into Excel templates using AI. Features multi-model AI support, user authentication, cloud storage, and subscription billing.
+Excel Vision AI - A production-ready Next.js 15 SaaS application that automates data entry from blurry photos/documents directly into Excel templates using AI. Features multi-model AI support via Vercel AI Gateway, user authentication, cloud storage, and subscription billing.
 
 ## Development Commands
 
@@ -15,13 +15,22 @@ pnpm build            # Production build
 pnpm start            # Start production server
 ```
 
+## ⚠️ Build/Test Rules
+
+**빌드 테스트 금지**: 사용자가 명시적으로 요청하기 전까지 `pnpm build`, `pnpm test` 등 빌드/테스트 명령을 실행하지 마세요.
+
+- ❌ 코드 수정 후 자동으로 빌드 검증하지 않기
+- ❌ "빌드 확인해볼게요" 하면서 임의로 실행하지 않기
+- ✅ 사용자가 "빌드해줘", "테스트해줘" 라고 명시적으로 요청할 때만 실행
+
 ## Environment Setup
 
 Create `.env.local` with the following variables:
 
 ```bash
-# AI (Required)
-GEMINI_API_KEY=your_gemini_key
+# Vercel AI Gateway (Required)
+# Get from: https://vercel.com/dashboard → AI Gateway
+AI_GATEWAY_API_KEY=your_ai_gateway_key
 
 # Supabase (Required for auth/db)
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -33,10 +42,6 @@ R2_ACCESS_KEY_ID=your_r2_access_key
 R2_SECRET_ACCESS_KEY=your_r2_secret_key
 R2_BUCKET_NAME=excel-vision-uploads
 R2_PUBLIC_URL=https://pub-xxx.r2.dev
-
-# Vercel AI SDK (Optional - for multi-model support)
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
 
 # LemonSqueezy (Optional - for billing)
 LEMONSQUEEZY_API_KEY=your_api_key
@@ -52,9 +57,17 @@ LEMONSQUEEZY_WEBHOOK_SECRET=your_webhook_secret
 - **Styling**: Tailwind CSS 3.4
 - **Auth/DB**: Supabase (PostgreSQL + Auth)
 - **Storage**: Cloudflare R2 (S3 compatible)
-- **AI**: Gemini Flash (default) + Vercel AI SDK (multi-model)
+- **AI**: Vercel AI Gateway (multi-model: Gemini, GPT-4o, Claude)
 - **Billing**: LemonSqueezy
 - **Excel**: XLSX library
+
+### AI Models (via Vercel AI Gateway)
+- `google/gemini-2.5-flash` (default, cheapest)
+- `google/gemini-2.5-pro`
+- `openai/gpt-4o`
+- `openai/gpt-4o-mini`
+- `anthropic/claude-sonnet-4-20250514`
+- `anthropic/claude-3-5-sonnet-20241022`
 
 ### Directory Structure
 
@@ -69,10 +82,9 @@ app/
 ├── auth/callback/route.ts       # OAuth callback
 └── api/
     ├── ai/
-    │   ├── identify-columns/    # Column detection (Gemini)
-    │   ├── extract-data/        # Data extraction (Gemini)
-    │   ├── detect-header/       # Header row detection
-    │   └── v2/                  # Vercel AI SDK (multi-model)
+    │   ├── identify-columns/    # Column detection
+    │   ├── extract-data/        # Data extraction
+    │   └── detect-header/       # Header row detection
     ├── storage/
     │   ├── presigned-upload/    # R2 upload URL
     │   └── presigned-download/  # R2 download URL
@@ -99,12 +111,13 @@ hooks/
 lib/
 ├── supabase/                    # Supabase clients
 ├── r2/                          # Cloudflare R2 client
-├── ai/                          # Vercel AI SDK
+├── ai/                          # Vercel AI Gateway
+│   └── vercel-ai.ts             # AI functions (Gateway-based)
 ├── lemonsqueezy/                # LemonSqueezy client
 └── billing/                     # Credit management
 
 services/
-├── geminiService.ts             # Gemini API (legacy)
+├── geminiService.ts             # Client-side AI service (calls API)
 └── excelService.ts              # Excel operations
 
 types/
@@ -133,7 +146,7 @@ middleware.ts                    # Auth middleware
 **AI Processing:**
 - Parallel image processing (5 concurrent)
 - Retry with exponential backoff
-- Multi-model support (Gemini, GPT-4o, Claude)
+- Multi-model support via Vercel AI Gateway
 - Confidence score display
 - Automatic header row detection
 
@@ -161,14 +174,33 @@ middleware.ts                    # Auth middleware
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/ai/identify-columns` | POST | Detect columns from image |
-| `/api/ai/extract-data` | POST | Extract data from image |
-| `/api/ai/detect-header` | POST | Find header row position |
-| `/api/ai/v2/*` | POST | Multi-model AI (provider param) |
+| `/api/ai/identify-columns` | POST | Detect columns from image (optional: model param) |
+| `/api/ai/extract-data` | POST | Extract data from image (optional: model param) |
+| `/api/ai/detect-header` | POST | Find header row position (optional: model param) |
 | `/api/storage/presigned-upload` | POST | Get R2 upload URL |
 | `/api/storage/presigned-download` | POST | Get R2 download URL |
 | `/api/billing/checkout` | POST | Create checkout session |
 | `/api/webhooks/lemonsqueezy` | POST | Handle billing webhooks |
+
+### AI API Usage Example
+
+```typescript
+// Default model (gemini-2.5-flash)
+fetch('/api/ai/identify-columns', {
+  method: 'POST',
+  body: JSON.stringify({ imageBase64 })
+});
+
+// Specific model
+fetch('/api/ai/extract-data', {
+  method: 'POST',
+  body: JSON.stringify({
+    imageBase64,
+    columns,
+    model: 'openai/gpt-4o'  // optional
+  })
+});
+```
 
 ## Path Aliases
 

@@ -27,15 +27,23 @@ export const excelColumnSchema = z.object({
 });
 
 /**
- * AI provider validation
+ * AI model validation (Vercel AI Gateway format)
  */
-export const aiProviderSchema = z.enum(['gemini', 'openai', 'anthropic']);
+export const aiModelSchema = z.enum([
+  'google/gemini-2.5-flash',
+  'google/gemini-2.5-pro',
+  'openai/gpt-4o',
+  'openai/gpt-4o-mini',
+  'anthropic/claude-sonnet-4-20250514',
+  'anthropic/claude-3-5-sonnet-20241022',
+]);
 
 /**
  * Detect header request schema
  */
 export const detectHeaderRequestSchema = z.object({
   imageBase64: base64ImageSchema,
+  model: aiModelSchema.optional(),
 });
 
 /**
@@ -43,7 +51,7 @@ export const detectHeaderRequestSchema = z.object({
  */
 export const identifyColumnsRequestSchema = z.object({
   imageBase64: base64ImageSchema,
-  provider: aiProviderSchema.optional().default('gemini'),
+  model: aiModelSchema.optional(),
 });
 
 /**
@@ -55,7 +63,7 @@ export const extractDataRequestSchema = z.object({
     .array(excelColumnSchema)
     .min(1, 'At least one column is required')
     .max(50, 'Maximum 50 columns allowed'),
-  provider: aiProviderSchema.optional().default('gemini'),
+  model: aiModelSchema.optional(),
 });
 
 /**

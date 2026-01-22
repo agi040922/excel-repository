@@ -33,6 +33,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     price: 9,
     credits: 200,
     storage: '500MB',
+    variantId: '1241337',  // LemonSqueezy Test Mode
     features: [
       '월 200개 이미지',
       '500MB 저장 공간',
@@ -46,6 +47,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     price: 29,
     credits: 1000,
     storage: '2GB',
+    variantId: '1241338',  // LemonSqueezy Test Mode
     features: [
       '월 1000개 이미지',
       '2GB 저장 공간',
@@ -70,12 +72,14 @@ export const CREDIT_PACKS: CreditPack[] = [
     name: '50 Credits',
     price: 5,
     credits: 50,
+    variantId: '1241339',  // LemonSqueezy Test Mode
   },
   {
     id: 'pack-200',
     name: '200 Credits',
     price: 15,
     credits: 200,
+    variantId: '1241340',  // LemonSqueezy Test Mode
   },
 ];
 

@@ -1,29 +1,10 @@
 import { NextRequest } from 'next/server';
-import { GoogleGenAI, Type } from "@google/genai";
+import { identifyColumnsWithAI } from '@/lib/ai/vercel-ai';
 import { successResponse, errorResponse, ErrorCodes, handleApiError } from '@/lib/api/response';
-import { detectHeaderRequestSchema, safeValidateRequest } from '@/lib/security/validation';
+import { identifyColumnsRequestSchema, safeValidateRequest } from '@/lib/security/validation';
 import { checkRateLimit, RateLimitPresets } from '@/lib/security/rateLimit';
-
-const MODEL_NAME = 'gemini-3-flash-preview';
-
-const getAiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is missing");
-  }
-  return new GoogleGenAI({ apiKey });
-};
-
-const parseBase64 = (base64Data: string) => {
-  const match = base64Data.match(/^data:(.*);base64,(.*)$/);
-  if (!match) {
-    throw new Error("Invalid base64 data");
-  }
-  return {
-    mimeType: match[1],
-    data: match[2]
-  };
-};
+import { createClient } from '@/lib/supabase/server';
+import { checkCredits, deductCredits } from '@/lib/billing/credits';
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,9 +18,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Authentication
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return errorResponse(
+        ErrorCodes.UNAUTHORIZED,
+        'Authentication required',
+        401
+      );
+    }
+
+    // Credit check
+    const hasCredits = await checkCredits(user.id, 1);
+    if (!hasCredits) {
+      return errorResponse(
+        ErrorCodes.INSUFFICIENT_CREDITS,
+        'Insufficient credits. Please purchase more credits or upgrade your plan.',
+        402
+      );
+    }
+
     // Validation
     const body = await request.json();
-    const validation = safeValidateRequest(detectHeaderRequestSchema, body);
+    const validation = safeValidateRequest(identifyColumnsRequestSchema, body);
 
     if (!validation.success) {
       return errorResponse(
@@ -49,44 +52,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { imageBase64 } = validation.data;
+    const { imageBase64, model } = validation.data;
 
-    const ai = getAiClient();
-    const { mimeType, data } = parseBase64(imageBase64);
+    // Use Vercel AI Gateway
+    const columns = await identifyColumnsWithAI(imageBase64, model);
 
-    const prompt = `
-      Analyze this document and identify the distinct data fields that would make good spreadsheet headers.
+    // Deduct credit after successful identification
+    await deductCredits(user.id, 1);
 
-      Rules:
-      1. Look for labels like "Date", "Invoice #", "Vendor", "Total Amount", "Tax", "Items", etc.
-      2. If the document contains a table, identify the column headers of that table.
-      3. Return a JSON ARRAY of strings. e.g. ["Date", "Description", "Qty", "Unit Price", "Total"].
-      4. Keep header names concise and clear.
-    `;
-
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          { inlineData: { mimeType, data } },
-          { text: prompt }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING }
-        }
-      }
-    });
-
-    const text = response.text;
-    if (!text) {
-      return successResponse({ columns: [] });
-    }
-
-    const columns = JSON.parse(text);
     return successResponse({ columns });
 
   } catch (error) {

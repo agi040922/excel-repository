@@ -1,28 +1,10 @@
 import { NextRequest } from 'next/server';
-import { GoogleGenAI, Type } from "@google/genai";
-import { ExcelColumn } from '@/types';
+import { extractDataWithAI } from '@/lib/ai/vercel-ai';
 import { successResponse, errorResponse, ErrorCodes, handleApiError } from '@/lib/api/response';
-import { getGeminiApiKey } from '@/lib/env';
 import { extractDataRequestSchema, safeValidateRequest } from '@/lib/security/validation';
 import { checkRateLimit, RateLimitPresets } from '@/lib/security/rateLimit';
-
-const MODEL_NAME = 'gemini-3-flash-preview';
-
-const getAiClient = () => {
-  const apiKey = getGeminiApiKey();
-  return new GoogleGenAI({ apiKey });
-};
-
-const parseBase64 = (base64Data: string) => {
-  const match = base64Data.match(/^data:(.*);base64,(.*)$/);
-  if (!match) {
-    throw new Error("Invalid base64 data");
-  }
-  return {
-    mimeType: match[1],
-    data: match[2]
-  };
-};
+import { createClient } from '@/lib/supabase/server';
+import { checkCredits, deductCredits } from '@/lib/billing/credits';
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,6 +15,28 @@ export async function POST(request: NextRequest) {
         ErrorCodes.RATE_LIMIT,
         'Too many requests. Please try again later.',
         429
+      );
+    }
+
+    // Authentication
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return errorResponse(
+        ErrorCodes.UNAUTHORIZED,
+        'Authentication required',
+        401
+      );
+    }
+
+    // Credit check
+    const hasCredits = await checkCredits(user.id, 1);
+    if (!hasCredits) {
+      return errorResponse(
+        ErrorCodes.INSUFFICIENT_CREDITS,
+        'Insufficient credits. Please purchase more credits or upgrade your plan.',
+        402
       );
     }
 
@@ -48,62 +52,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { imageBase64, columns } = validation.data;
+    const { imageBase64, columns, model } = validation.data;
 
-    const ai = getAiClient();
-    const { mimeType, data } = parseBase64(imageBase64);
+    // Use Vercel AI Gateway
+    const data = await extractDataWithAI(imageBase64, columns, model);
 
-    const headers = columns.map((c: ExcelColumn) => c.header);
+    // Deduct credit after successful extraction
+    await deductCredits(user.id, 1);
 
-    const prompt = `
-      Extract ALL data rows from this document strictly matching these headers: ${JSON.stringify(headers)}.
-
-      Rules:
-      1. Return a JSON ARRAY of objects. Each object represents one row of data.
-      2. If the document contains a table with multiple items, extract EACH item as a separate object.
-      3. If the document contains a single form, return an array with one object.
-      4. Keys must match the headers EXACTLY.
-      5. If a field is not found, use an empty string "".
-      6. For date fields, use YYYY-MM-DD format.
-      7. For numeric fields, return numbers (remove currency symbols like $ or ,).
-    `;
-
-    // Dynamic strict schema: Array of Objects
-    const properties: Record<string, { type: typeof Type.STRING }> = {};
-    columns.forEach((col: ExcelColumn) => {
-      properties[col.header] = { type: Type.STRING };
-    });
-
-    const responseSchema = {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties,
-        required: headers,
-      }
-    };
-
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          { inlineData: { mimeType, data } },
-          { text: prompt }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: responseSchema
-      }
-    });
-
-    const text = response.text;
-    if (!text) {
-      return successResponse({ data: [] });
-    }
-
-    const extractedData = JSON.parse(text);
-    return successResponse({ data: extractedData });
+    return successResponse({ data });
 
   } catch (error) {
     return handleApiError(error, 'AI/extract-data');

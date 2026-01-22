@@ -1,33 +1,31 @@
-import { google } from '@ai-sdk/google';
-import { openai } from '@ai-sdk/openai';
-import { anthropic } from '@ai-sdk/anthropic';
+import { gateway } from '@ai-sdk/gateway';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { ExcelColumn } from '@/types';
 
 // 지원하는 모델 타입
-export type AIProvider = 'gemini' | 'openai' | 'anthropic';
+export type AIModel =
+  | 'google/gemini-2.5-flash'
+  | 'google/gemini-2.5-pro'
+  | 'openai/gpt-4o'
+  | 'openai/gpt-4o-mini'
+  | 'anthropic/claude-sonnet-4-20250514'
+  | 'anthropic/claude-3-5-sonnet-20241022';
+
+// 기본 모델 (Gemini Flash - 가장 저렴)
+export const DEFAULT_MODEL: AIModel = 'google/gemini-2.5-flash';
 
 // 모델 선택 함수
-export function getModel(provider: AIProvider) {
-  switch (provider) {
-    case 'gemini':
-      return google('gemini-2.0-flash-exp');
-    case 'openai':
-      return openai('gpt-4o');
-    case 'anthropic':
-      return anthropic('claude-sonnet-4-20250514');
-    default:
-      return google('gemini-2.0-flash-exp');
-  }
+export function getModel(modelId: AIModel = DEFAULT_MODEL) {
+  return gateway(modelId);
 }
 
-// 컬럼 감지 (Vercel AI SDK 버전)
-export async function identifyColumnsWithVercelAI(
+// 컬럼 감지
+export async function identifyColumnsWithAI(
   imageBase64: string,
-  provider: AIProvider = 'gemini'
+  modelId: AIModel = DEFAULT_MODEL
 ) {
-  const model = getModel(provider);
+  const model = getModel(modelId);
 
   const prompt = `
     Analyze this document and identify the distinct data fields that would make good spreadsheet headers.
@@ -60,13 +58,13 @@ export async function identifyColumnsWithVercelAI(
   return result.object.headers;
 }
 
-// 데이터 추출 (Vercel AI SDK 버전)
-export async function extractDataWithVercelAI(
+// 데이터 추출
+export async function extractDataWithAI(
   imageBase64: string,
   columns: ExcelColumn[],
-  provider: AIProvider = 'gemini'
+  modelId: AIModel = DEFAULT_MODEL
 ) {
-  const model = getModel(provider);
+  const model = getModel(modelId);
   const headers = columns.map(c => c.header);
 
   const prompt = `
@@ -103,4 +101,43 @@ export async function extractDataWithVercelAI(
   });
 
   return result.object.data;
+}
+
+// 헤더 행 감지
+export async function detectHeaderRowWithAI(
+  imageBase64: string,
+  modelId: AIModel = DEFAULT_MODEL
+) {
+  const model = getModel(modelId);
+
+  const prompt = `
+    Analyze this Excel/spreadsheet image and determine which row contains the column headers.
+
+    Rules:
+    1. The header row usually contains labels like "Name", "Date", "Amount", "Description", etc.
+    2. It's typically the first row with text, but sometimes there's a title row above it.
+    3. Return the 1-based row number (1 means first row, 2 means second row, etc.)
+    4. If you can't determine the header row, return 1 as the default.
+  `;
+
+  const schema = z.object({
+    headerRow: z.number().min(1).describe('1-based row number of the header row'),
+    confidence: z.number().min(0).max(1).describe('Confidence score 0-1')
+  });
+
+  const result = await generateObject({
+    model,
+    schema,
+    messages: [
+      {
+        role: 'user' as const,
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image', image: imageBase64 }
+        ]
+      }
+    ]
+  });
+
+  return result.object;
 }

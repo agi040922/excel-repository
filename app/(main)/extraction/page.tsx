@@ -146,96 +146,65 @@ export default function ExtractionPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-excel-600 rounded-lg flex items-center justify-center text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path d="M18.375 2.25c-1.035 0-1.875.84-1.875 1.875v15.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V4.125c0-1.035-.84-1.875-1.875-1.875h-.75ZM9.75 8.625c0-1.035.84-1.875 1.875-1.875h.75c1.035 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875h-.75a1.875 1.875 0 0 1-1.875-1.875V8.625ZM3 13.125c0-1.035.84-1.875 1.875-1.875h.75c1.035 0 1.875.84 1.875 1.875v6.75c0 1.035-.84 1.875-1.875 1.875h-.75A1.875 1.875 0 0 1 3 19.875v-6.75Z" />
-                </svg>
-              </div>
-              <span className="font-bold text-xl text-slate-800">Excel Vision AI</span>
-            </div>
+    <div className="space-y-6">
+      <StepIndicator currentStep={step} templateName={templateName} />
 
-            <div className="hidden md:flex items-center px-2 py-1 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-md text-xs font-medium text-blue-700">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 mr-1">
-                <path fillRule="evenodd" d="M9 4.5a.75.75 0 0 1 .721.544l.813 2.846a3.75 3.75 0 0 0 2.576 2.576l2.846.813a.75.75 0 0 1 0 1.442l-2.846.813a3.75 3.75 0 0 0-2.576 2.576l-.813 2.846a.75.75 0 0 1-1.442 0l-.813-2.846a3.75 3.75 0 0 0-2.576-2.576l-2.846-.813a.75.75 0 0 1 0-1.442l2.846-.813a3.75 3.75 0 0 0 2.576-2.576l.813-2.846A.75.75 0 0 1 9 4.5ZM19.75 11.625a.375.375 0 0 0-.375.375v2.875c0 .621.504 1.125 1.125 1.125h.375a3.75 3.75 0 0 1 3.75 3.75v1.875a.375.375 0 0 0 .75 0v-1.875a4.5 4.5 0 0 0-4.5-4.5h-.375v-2.875a.375.375 0 0 0-.375-.375Z" clipRule="evenodd" />
-              </svg>
-              Powered by Gemini 3 Flash
-            </div>
-          </div>
-          {templateName && (
-            <div className="text-sm px-3 py-1 bg-slate-100 rounded-full text-slate-600 border border-slate-200 max-w-[200px] truncate">
-              {templateName}
-            </div>
-          )}
-        </div>
-      </header>
+      {step === AppStep.UPLOAD_TEMPLATE && (
+        <UploadTemplateStep
+          onTemplateUpload={handleTemplateUpload}
+          onStartWithoutTemplate={handleStartWithoutTemplate}
+        />
+      )}
 
-      <main className="flex-grow p-4 sm:p-8">
-        <div className="max-w-7xl mx-auto">
-          <StepIndicator currentStep={step} templateName={templateName} />
+      {step === AppStep.DEFINE_COLUMNS && (
+        <DefineColumnsStep
+          columns={columns}
+          sampleImage={sampleImage}
+          isAnalyzingSample={isAnalyzingSample}
+          newColumnName={newColumnName}
+          templateFile={templateFile}
+          onSampleUpload={handleSampleUpload}
+          onUpdateColumnName={updateColumnName}
+          onRemoveColumn={removeColumn}
+          onAddColumn={addColumn}
+          onConfirmColumns={confirmColumns}
+          onCloseSample={() => {
+            setSampleImage(null);
+            setHeaderDetection(null);
+          }}
+          setNewColumnName={setNewColumnName}
+          headerDetection={headerDetection || undefined}
+          onHeaderRowChange={handleHeaderRowChange}
+        />
+      )}
 
-          {step === AppStep.UPLOAD_TEMPLATE && (
-            <UploadTemplateStep
-              onTemplateUpload={handleTemplateUpload}
-              onStartWithoutTemplate={handleStartWithoutTemplate}
-            />
-          )}
+      {step === AppStep.UPLOAD_IMAGES && (
+        <UploadImagesStep
+          items={items}
+          isProcessing={isProcessing}
+          onImageUpload={handleImageUpload}
+          onProcessImages={processImages}
+          progress={getProgress()}
+          onRetryFailed={retryFailed}
+        />
+      )}
 
-          {step === AppStep.DEFINE_COLUMNS && (
-            <DefineColumnsStep
-              columns={columns}
-              sampleImage={sampleImage}
-              isAnalyzingSample={isAnalyzingSample}
-              newColumnName={newColumnName}
-              templateFile={templateFile}
-              onSampleUpload={handleSampleUpload}
-              onUpdateColumnName={updateColumnName}
-              onRemoveColumn={removeColumn}
-              onAddColumn={addColumn}
-              onConfirmColumns={confirmColumns}
-              onCloseSample={() => {
-                setSampleImage(null);
-                setHeaderDetection(null);
-              }}
-              setNewColumnName={setNewColumnName}
-              headerDetection={headerDetection || undefined}
-              onHeaderRowChange={handleHeaderRowChange}
-            />
-          )}
+      {step === AppStep.REVIEW_DATA && (
+        <ReviewDataStep
+          columns={columns}
+          items={items}
+          templateName={templateName}
+          onCellChange={handleCellChange}
+          onExport={handleExport}
+        />
+      )}
 
-          {step === AppStep.UPLOAD_IMAGES && (
-            <UploadImagesStep
-              items={items}
-              isProcessing={isProcessing}
-              onImageUpload={handleImageUpload}
-              onProcessImages={processImages}
-              progress={getProgress()}
-              onRetryFailed={retryFailed}
-            />
-          )}
-
-          {step === AppStep.REVIEW_DATA && (
-            <ReviewDataStep
-              columns={columns}
-              items={items}
-              templateName={templateName}
-              onCellChange={handleCellChange}
-              onExport={handleExport}
-            />
-          )}
-
-          {step === AppStep.EXPORT && (
-            <ExportStep
-              templateFile={templateFile}
-              onReset={reset}
-            />
-          )}
-        </div>
-      </main>
+      {step === AppStep.EXPORT && (
+        <ExportStep
+          templateFile={templateFile}
+          onReset={reset}
+        />
+      )}
     </div>
   );
 }

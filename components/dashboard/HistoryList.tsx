@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { TableSkeleton } from '@/components/common/Skeleton';
+import React, { useState, useMemo, useCallback } from 'react';
 import { NoHistoryEmptyState } from '@/components/common/EmptyState';
 
 interface ExtractionHistory {
@@ -14,6 +13,7 @@ interface ExtractionHistory {
 }
 
 interface HistoryListProps {
+  history: ExtractionHistory[];
   onReopen?: (id: string) => void;
   onDownload?: (id: string) => void;
 }
@@ -50,9 +50,9 @@ const StatusBadge: React.FC<{ status: ExtractionHistory['status'] }> = ({ status
   };
 
   const labels = {
-    completed: 'Completed',
-    pending: 'Pending',
-    error: 'Error'
+    completed: '완료',
+    pending: '진행 중',
+    error: '오류'
   };
 
   return (
@@ -86,7 +86,7 @@ const HistoryRow = React.memo<HistoryRowProps>(({
           </div>
           <div>
             <p className="font-medium text-slate-900">{templateName}</p>
-            <p className="text-sm text-slate-500">{rowsExtracted} rows extracted</p>
+            <p className="text-sm text-slate-500">{rowsExtracted}개 행 추출됨</p>
           </div>
         </div>
       </td>
@@ -95,7 +95,7 @@ const HistoryRow = React.memo<HistoryRowProps>(({
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-slate-400">
             <path fillRule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-2.69l-2.22-2.219a.75.75 0 00-1.06 0l-1.91 1.909.47.47a.75.75 0 11-1.06 1.06L6.53 8.091a.75.75 0 00-1.06 0l-2.97 2.97zM12 7a1 1 0 11-2 0 1 1 0 012 0z" clipRule="evenodd" />
           </svg>
-          <span>{imageCount} images</span>
+          <span>{imageCount}개 이미지</span>
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
@@ -133,7 +133,7 @@ const HistoryRow = React.memo<HistoryRowProps>(({
                     <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z" />
                     <path d="M11.603 7.963a.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 105.656 5.656l3-3a4 4 0 00-.225-5.865z" />
                   </svg>
-                  <span>Reopen</span>
+                  <span>다시 열기</span>
                 </button>
                 <button
                   onClick={() => {
@@ -146,7 +146,7 @@ const HistoryRow = React.memo<HistoryRowProps>(({
                     <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
                     <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
                   </svg>
-                  <span>Download Excel</span>
+                  <span>엑셀 다운로드</span>
                 </button>
                 <button
                   onClick={() => {
@@ -158,7 +158,7 @@ const HistoryRow = React.memo<HistoryRowProps>(({
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                     <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
                   </svg>
-                  <span>Delete</span>
+                  <span>삭제</span>
                 </button>
               </div>
             </>
@@ -171,69 +171,7 @@ const HistoryRow = React.memo<HistoryRowProps>(({
 
 HistoryRow.displayName = 'HistoryRow';
 
-export const HistoryList: React.FC<HistoryListProps> = ({ onReopen, onDownload }) => {
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Simulate data loading
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1200);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Dummy data - to be replaced with real data from Supabase
-  const history: ExtractionHistory[] = [
-    {
-      id: '1',
-      templateName: 'Inventory List.xlsx',
-      imageCount: 8,
-      date: '2 hours ago',
-      status: 'completed',
-      rowsExtracted: 45
-    },
-    {
-      id: '2',
-      templateName: 'Invoice Template.xlsx',
-      imageCount: 3,
-      date: '1 day ago',
-      status: 'completed',
-      rowsExtracted: 18
-    },
-    {
-      id: '3',
-      templateName: 'Customer Data.xlsx',
-      imageCount: 15,
-      date: '2 days ago',
-      status: 'completed',
-      rowsExtracted: 87
-    },
-    {
-      id: '4',
-      templateName: 'Product Catalog.xlsx',
-      imageCount: 22,
-      date: '3 days ago',
-      status: 'completed',
-      rowsExtracted: 132
-    },
-    {
-      id: '5',
-      templateName: 'Sales Report.xlsx',
-      imageCount: 5,
-      date: '5 days ago',
-      status: 'error',
-      rowsExtracted: 0
-    },
-    {
-      id: '6',
-      templateName: 'Expense Data.xlsx',
-      imageCount: 12,
-      date: '1 week ago',
-      status: 'completed',
-      rowsExtracted: 64
-    }
-  ];
-
+export const HistoryList: React.FC<HistoryListProps> = ({ history, onReopen, onDownload }) => {
   // useMemo: Calculate statistics only when history changes
   const stats = useMemo(() => {
     return {
@@ -246,8 +184,8 @@ export const HistoryList: React.FC<HistoryListProps> = ({ onReopen, onDownload }
 
   // useCallback: Memoize handlers to prevent HistoryRow re-renders
   const handleDelete = useCallback((id: string) => {
-    if (confirm('Are you sure you want to delete this extraction?')) {
-      alert(`Delete extraction ${id} (implementation pending)`);
+    if (confirm('이 추출 기록을 삭제하시겠습니까?')) {
+      alert(`추출 ${id} 삭제 (구현 예정)`);
     }
   }, []);
 
@@ -264,76 +202,57 @@ export const HistoryList: React.FC<HistoryListProps> = ({ onReopen, onDownload }
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Extraction History</h1>
-          <p className="text-slate-500">View and manage your past extractions</p>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">추출 이력</h1>
+          <p className="text-slate-500">과거 추출 작업을 확인하고 관리하세요</p>
         </div>
-        <button className="px-4 py-2.5 border border-slate-300 rounded-lg font-medium text-slate-700 hover:bg-slate-50 transition-all flex items-center space-x-2">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-            <path fillRule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 018 18.25v-5.757a2.25 2.25 0 00-.659-1.591L2.659 6.22A2.25 2.25 0 012 4.629V2.34a.75.75 0 01.628-.74z" clipRule="evenodd" />
-          </svg>
-          <span>Filter</span>
-        </button>
       </div>
 
       {/* Stats Summary */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="h-4 bg-gray-200 rounded animate-pulse w-24 mb-2" />
-              <div className="h-8 bg-gray-200 rounded animate-pulse w-16" />
-            </div>
-          ))}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <p className="text-sm text-slate-500 mb-1">전체 추출</p>
+          <p className="text-2xl font-bold text-slate-900">{stats.totalExtractions}</p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <p className="text-sm text-slate-500 mb-1">Total Extractions</p>
-            <p className="text-2xl font-bold text-slate-900">{stats.totalExtractions}</p>
-          </div>
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <p className="text-sm text-slate-500 mb-1">Completed</p>
-            <p className="text-2xl font-bold text-green-600">
-              {stats.completedCount}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <p className="text-sm text-slate-500 mb-1">Total Images</p>
-            <p className="text-2xl font-bold text-slate-900">
-              {stats.totalImages}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <p className="text-sm text-slate-500 mb-1">Rows Extracted</p>
-            <p className="text-2xl font-bold text-excel-600">
-              {stats.totalRows}
-            </p>
-          </div>
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <p className="text-sm text-slate-500 mb-1">완료됨</p>
+          <p className="text-2xl font-bold text-green-600">
+            {stats.completedCount}
+          </p>
         </div>
-      )}
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <p className="text-sm text-slate-500 mb-1">처리된 이미지</p>
+          <p className="text-2xl font-bold text-slate-900">
+            {stats.totalImages}
+          </p>
+        </div>
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <p className="text-sm text-slate-500 mb-1">추출된 행</p>
+          <p className="text-2xl font-bold text-excel-600">
+            {stats.totalRows}
+          </p>
+        </div>
+      </div>
 
       {/* History Table */}
-      {isLoading ? (
-        <TableSkeleton rows={6} columns={5} />
-      ) : history.length > 0 ? (
+      {history.length > 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Template
+                  템플릿
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Images
+                  이미지
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Status
+                  상태
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Date
+                  날짜
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Actions
+                  작업
                 </th>
               </tr>
             </thead>

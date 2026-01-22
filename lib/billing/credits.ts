@@ -51,8 +51,8 @@ export async function deductCredits(
 
   // Deduct credits using SQL function to ensure atomicity
   const { error } = await supabase.rpc('deduct_credits', {
-    user_id: userId,
-    amount,
+    p_user_id: userId,
+    p_amount: amount,
   });
 
   if (error) {
@@ -73,8 +73,8 @@ export async function addCredits(
   const supabase = await createClient();
 
   const { error } = await supabase.rpc('add_credits', {
-    user_id: userId,
-    amount,
+    p_user_id: userId,
+    p_amount: amount,
   });
 
   if (error) {

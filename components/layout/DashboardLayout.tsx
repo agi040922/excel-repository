@@ -5,20 +5,14 @@ import { User } from '@supabase/supabase-js';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 
-type DashboardPage = 'dashboard' | 'new-extraction' | 'templates' | 'history' | 'settings';
-
 interface DashboardLayoutProps {
   children: ReactNode;
-  currentPage: DashboardPage;
-  onNavigate: (page: DashboardPage) => void;
   templateName?: string;
   user?: User | null;
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   children,
-  currentPage,
-  onNavigate,
   templateName,
   user
 }) => {
@@ -36,11 +30,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       <div className="flex-grow flex overflow-hidden">
         {/* Sidebar */}
         <Sidebar
-          currentPage={currentPage}
-          onNavigate={(page) => {
-            onNavigate(page);
-            setIsSidebarOpen(false); // Close sidebar on mobile after navigation
-          }}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
         />

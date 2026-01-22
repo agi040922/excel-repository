@@ -1,13 +1,18 @@
 import { ExcelColumn } from '../types';
 
 /**
- * 기존 Gemini 전용 서비스 - 계속 사용 가능
+ * AI Service - Vercel AI Gateway 기반
  *
- * 다른 모델(GPT-4o, Claude) 사용을 원하면:
- * - /api/ai/v2/identify-columns (Vercel AI SDK 버전)
- * - /api/ai/v2/extract-data (Vercel AI SDK 버전)
+ * 지원 모델:
+ * - google/gemini-2.5-flash (기본값, 가장 저렴)
+ * - google/gemini-2.5-pro
+ * - openai/gpt-4o
+ * - openai/gpt-4o-mini
+ * - anthropic/claude-sonnet-4-20250514
+ * - anthropic/claude-3-5-sonnet-20241022
  *
- * 요청 시 provider 파라미터 추가: { imageBase64, provider: 'gemini' | 'openai' | 'anthropic' }
+ * 다른 모델 사용: 요청 시 model 파라미터 추가
+ * { imageBase64, model: 'openai/gpt-4o' }
  */
 
 /**

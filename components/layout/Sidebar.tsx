@@ -1,12 +1,12 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 type DashboardPage = 'dashboard' | 'new-extraction' | 'templates' | 'history' | 'settings';
 
 interface SidebarProps {
-  currentPage: DashboardPage;
-  onNavigate: (page: DashboardPage) => void;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -14,17 +14,16 @@ interface SidebarProps {
 interface NavItemProps {
   icon: React.ReactNode;
   label: string;
-  page: DashboardPage;
-  currentPage: DashboardPage;
-  onClick: () => void;
+  href: string;
+  isActive: boolean;
+  onClick?: () => void;
   badge?: string;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, label, page, currentPage, onClick, badge }) => {
-  const isActive = currentPage === page;
-
+const NavItem: React.FC<NavItemProps> = ({ icon, label, href, isActive, onClick, badge }) => {
   return (
-    <button
+    <Link
+      href={href}
       onClick={onClick}
       className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all group relative ${
         isActive
@@ -41,12 +40,25 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, page, currentPage, onCli
           {badge}
         </span>
       )}
-    </button>
+    </Link>
   );
 };
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpen }) => {
-  const navItems: Array<Omit<NavItemProps, 'currentPage' | 'onClick'>> = [
+// pathname을 DashboardPage로 변환
+function getPageFromPathname(pathname: string): DashboardPage {
+  if (pathname === '/') return 'dashboard';
+  if (pathname.startsWith('/extraction')) return 'new-extraction';
+  if (pathname.startsWith('/templates')) return 'templates';
+  if (pathname.startsWith('/history')) return 'history';
+  if (pathname.startsWith('/settings')) return 'settings';
+  return 'dashboard';
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+  const pathname = usePathname();
+  const currentPage = getPageFromPathname(pathname);
+
+  const navItems = [
     {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -55,7 +67,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpe
         </svg>
       ),
       label: 'Dashboard',
-      page: 'dashboard' as DashboardPage
+      page: 'dashboard' as DashboardPage,
+      href: '/'
     },
     {
       icon: (
@@ -64,7 +77,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpe
         </svg>
       ),
       label: 'New Extraction',
-      page: 'new-extraction' as DashboardPage
+      page: 'new-extraction' as DashboardPage,
+      href: '/extraction'
     },
     {
       icon: (
@@ -73,7 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpe
         </svg>
       ),
       label: 'Templates',
-      page: 'templates' as DashboardPage
+      page: 'templates' as DashboardPage,
+      href: '/templates'
     },
     {
       icon: (
@@ -83,7 +98,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpe
         </svg>
       ),
       label: 'History',
-      page: 'history' as DashboardPage
+      page: 'history' as DashboardPage,
+      href: '/history'
     },
     {
       icon: (
@@ -92,7 +108,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpe
         </svg>
       ),
       label: 'Settings',
-      page: 'settings' as DashboardPage
+      page: 'settings' as DashboardPage,
+      href: '/settings'
     }
   ];
 
@@ -104,9 +121,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpe
           {navItems.map((item) => (
             <NavItem
               key={item.page}
-              {...item}
-              currentPage={currentPage}
-              onClick={() => onNavigate(item.page)}
+              icon={item.icon}
+              label={item.label}
+              href={item.href}
+              isActive={currentPage === item.page}
             />
           ))}
         </nav>
@@ -137,9 +155,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpe
           {navItems.map((item) => (
             <NavItem
               key={item.page}
-              {...item}
-              currentPage={currentPage}
-              onClick={() => onNavigate(item.page)}
+              icon={item.icon}
+              label={item.label}
+              href={item.href}
+              isActive={currentPage === item.page}
+              onClick={onClose}
             />
           ))}
         </nav>

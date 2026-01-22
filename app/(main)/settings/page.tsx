@@ -133,7 +133,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex items-center justify-center py-12">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">로딩 중...</p>
@@ -166,89 +166,87 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">설정</h1>
-          <p className="mt-2 text-gray-600">
-            플랜 관리 및 사용량 확인
-          </p>
-        </div>
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">설정</h1>
+        <p className="mt-2 text-gray-600">
+          플랜 관리 및 사용량 확인
+        </p>
+      </div>
 
-        {/* Current Plan and Usage */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
-          {userData && (
-            <>
-              <CurrentPlan
-                tier={userData.tier}
-                subscriptionStatus={userData.subscriptionStatus}
-                currentPeriodEnd={userData.currentPeriodEnd}
-              />
-              <UsageStats
-                credits={userData.credits}
-                maxCredits={getMaxCredits(userData.tier)}
-                storageUsed={userData.storageUsed}
-                maxStorage={getMaxStorage(userData.tier)}
-              />
-            </>
-          )}
-        </div>
+      {/* Current Plan and Usage */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {userData && (
+          <>
+            <CurrentPlan
+              tier={userData.tier}
+              subscriptionStatus={userData.subscriptionStatus}
+              currentPeriodEnd={userData.currentPeriodEnd}
+            />
+            <UsageStats
+              credits={userData.credits}
+              maxCredits={getMaxCredits(userData.tier)}
+              storageUsed={userData.storageUsed}
+              maxStorage={getMaxStorage(userData.tier)}
+            />
+          </>
+        )}
+      </div>
 
-        {/* Tabs */}
-        <div className="mb-8">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              <button
-                onClick={() => setActiveTab('plans')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'plans'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                플랜 변경
-              </button>
-              <button
-                onClick={() => setActiveTab('credits')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'credits'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                크레딧 구매
-              </button>
-            </nav>
+      {/* Tabs */}
+      <div>
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('plans')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'plans'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              플랜 변경
+            </button>
+            <button
+              onClick={() => setActiveTab('credits')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'credits'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              크레딧 구매
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div>
+        {activeTab === 'plans' && userData && (
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+              플랜 선택
+            </h2>
+            <PricingTable
+              currentTier={userData.tier}
+              onSelectPlan={handleSelectPlan}
+            />
           </div>
-        </div>
+        )}
 
-        {/* Content */}
-        <div className="mt-8">
-          {activeTab === 'plans' && userData && (
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-                플랜 선택
-              </h2>
-              <PricingTable
-                currentTier={userData.tier}
-                onSelectPlan={handleSelectPlan}
-              />
-            </div>
-          )}
-
-          {activeTab === 'credits' && (
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-                추가 크레딧 구매
-              </h2>
-              <p className="text-center text-gray-600 mb-8">
-                크레딧은 즉시 계정에 추가되며 만료되지 않습니다
-              </p>
-              <CreditPacksGrid onSelectPack={handleSelectPack} />
-            </div>
-          )}
-        </div>
+        {activeTab === 'credits' && (
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+              추가 크레딧 구매
+            </h2>
+            <p className="text-center text-gray-600 mb-8">
+              크레딧은 즉시 계정에 추가되며 만료되지 않습니다
+            </p>
+            <CreditPacksGrid onSelectPack={handleSelectPack} />
+          </div>
+        )}
       </div>
     </div>
   );
