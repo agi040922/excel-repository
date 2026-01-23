@@ -71,11 +71,14 @@ export const parseExcelHeaders = async (file: File): Promise<ExcelColumn[]> => {
   });
 };
 
-export const generateExcelFile = async (
+/**
+ * Excel Blob을 생성하는 내부 함수
+ */
+const createExcelWorkbook = async (
   columns: ExcelColumn[],
   data: ExcelDataRow[],
   templateFile?: File
-): Promise<void> => {
+): Promise<XLSX.WorkBook> => {
   let workbook: XLSX.WorkBook;
   let worksheet: XLSX.WorkSheet;
 
@@ -112,6 +115,34 @@ export const generateExcelFile = async (
     workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Processed Data");
   }
+
+  return workbook;
+};
+
+/**
+ * Excel Blob을 생성 (R2 업로드용)
+ */
+export const generateExcelBlob = async (
+  columns: ExcelColumn[],
+  data: ExcelDataRow[],
+  templateFile?: File
+): Promise<Blob> => {
+  const workbook = await createExcelWorkbook(columns, data, templateFile);
+  const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  return new Blob([wbout], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+};
+
+/**
+ * Excel 파일을 로컬 다운로드 (기존 함수)
+ */
+export const generateExcelFile = async (
+  columns: ExcelColumn[],
+  data: ExcelDataRow[],
+  templateFile?: File
+): Promise<void> => {
+  const workbook = await createExcelWorkbook(columns, data, templateFile);
 
   // 3. Write file
   // Use original filename if available so it feels like an update (browser will handle duplicates like 'file (1).xlsx')

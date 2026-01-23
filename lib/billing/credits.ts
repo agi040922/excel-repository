@@ -2,6 +2,7 @@
  * Credit management functions
  */
 
+import { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { SubscriptionTier } from '@/types/billing';
 
@@ -50,6 +51,7 @@ export async function deductCredits(
   }
 
   // Deduct credits using SQL function to ensure atomicity
+  // Note: DB function uses p_user_id, p_amount parameter names
   const { error } = await supabase.rpc('deduct_credits', {
     p_user_id: userId,
     p_amount: amount,
@@ -65,13 +67,16 @@ export async function deductCredits(
  * Add credits to user account
  * @param userId - User ID
  * @param amount - Number of credits to add
+ * @param supabaseClient - Optional Supabase client (for admin operations)
  */
 export async function addCredits(
   userId: string,
-  amount: number
+  amount: number,
+  supabaseClient?: SupabaseClient
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = supabaseClient || (await createClient());
 
+  // Note: DB function uses p_user_id, p_amount parameter names
   const { error } = await supabase.rpc('add_credits', {
     p_user_id: userId,
     p_amount: amount,
@@ -110,13 +115,15 @@ export async function getCredits(userId: string): Promise<number> {
  * @param userId - User ID
  * @param tier - New subscription tier
  * @param subscriptionId - LemonSqueezy subscription ID (optional)
+ * @param supabaseClient - Optional Supabase client (for admin operations)
  */
 export async function updateSubscriptionTier(
   userId: string,
   tier: SubscriptionTier,
-  subscriptionId?: string
+  subscriptionId?: string,
+  supabaseClient?: SupabaseClient
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = supabaseClient || (await createClient());
 
   // 타입 안전한 업데이트 데이터 구성
   const updateData: {
@@ -130,7 +137,7 @@ export async function updateSubscriptionTier(
     updateData.subscription_id = subscriptionId;
   }
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from('profiles')
     .update(updateData)
     .eq('id', userId);
@@ -139,6 +146,8 @@ export async function updateSubscriptionTier(
     console.error('Error updating subscription tier:', error);
     throw new Error('Failed to update subscription tier');
   }
+
+  console.log(`Updated subscription tier for ${userId} to ${tier}`);
 }
 
 /**
@@ -146,12 +155,14 @@ export async function updateSubscriptionTier(
  * This should be called when subscription renews
  * @param userId - User ID
  * @param tier - Subscription tier
+ * @param supabaseClient - Optional Supabase client (for admin operations)
  */
 export async function resetMonthlyCredits(
   userId: string,
-  tier: SubscriptionTier
+  tier: SubscriptionTier,
+  supabaseClient?: SupabaseClient
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = supabaseClient || (await createClient());
 
   // Define monthly credits for each tier
   const monthlyCredits: Record<SubscriptionTier, number> = {
@@ -171,4 +182,6 @@ export async function resetMonthlyCredits(
     console.error('Error resetting monthly credits:', error);
     throw new Error('Failed to reset monthly credits');
   }
+
+  console.log(`Reset credits for ${userId} to ${credits} (${tier} tier)`);
 }

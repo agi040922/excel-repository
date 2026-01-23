@@ -3,14 +3,24 @@
 import { FileUploader, type FileUploadResult } from '@/components/FileUploader';
 import { ExcelIcon } from '@/components/icons';
 
+interface SavedTemplate {
+  id: string;
+  name: string;
+  columnCount: number;
+}
+
 interface UploadTemplateStepProps {
   onTemplateUpload: (files: File[] | FileUploadResult[]) => void;
   onStartWithoutTemplate: () => void;
+  savedTemplates?: SavedTemplate[];
+  onSelectTemplate?: (templateId: string) => void;
 }
 
 export const UploadTemplateStep: React.FC<UploadTemplateStepProps> = ({
   onTemplateUpload,
   onStartWithoutTemplate,
+  savedTemplates,
+  onSelectTemplate,
 }) => {
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
@@ -28,6 +38,37 @@ export const UploadTemplateStep: React.FC<UploadTemplateStepProps> = ({
         subtitle="Supports .xlsx and .xls"
         icon={<ExcelIcon />}
       />
+
+      {/* 저장된 템플릿 선택 */}
+      {savedTemplates && savedTemplates.length > 0 && onSelectTemplate && (
+        <>
+          <div className="relative flex py-5 items-center">
+            <div className="flex-grow border-t border-slate-200"></div>
+            <span className="flex-shrink-0 mx-4 text-slate-400 text-sm">OR</span>
+            <div className="flex-grow border-t border-slate-200"></div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold text-slate-800 mb-3">저장된 템플릿 선택</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {savedTemplates.map(template => (
+                <button
+                  key={template.id}
+                  onClick={() => onSelectTemplate(template.id)}
+                  className="p-4 border border-slate-200 rounded-lg hover:border-excel-500 hover:bg-excel-50 text-left transition-colors group"
+                >
+                  <div className="font-medium text-slate-800 group-hover:text-excel-700 transition-colors">
+                    {template.name}
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">
+                    {template.columnCount}개 컬럼
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="relative flex py-5 items-center">
         <div className="flex-grow border-t border-slate-200"></div>

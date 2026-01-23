@@ -67,6 +67,8 @@ export const UploadImagesStep: React.FC<UploadImagesStepProps> = ({
         title="Drop images or PDFs here"
         subtitle="Supports JPG, PNG, WEBP, PDF (Blurry images accepted)"
         icon={<ImageIcon />}
+        enableR2Upload={true}
+        r2Folder="extractions"
       />
 
       {progress && progress.total > 0 && (

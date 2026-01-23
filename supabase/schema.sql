@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS extractions (
   result_data JSONB, -- 추출된 데이터 결과
   credits_used INT DEFAULT 1 NOT NULL,
   error_message TEXT,
+  exported_file_url TEXT, -- Export된 Excel 파일의 R2 URL
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 

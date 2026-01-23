@@ -1,17 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { parseExcelHeaders, generateExcelFile } from '@/services/excelService';
 import { identifyColumnsFromImage, detectHeaderRow } from '@/services/geminiService';
-import { AppStep } from '@/types';
+import { AppStep, ExcelColumn } from '@/types';
 import { StepIndicator } from '@/components/common/StepIndicator';
 import { useWorkflow } from '@/hooks/useWorkflow';
 import { useColumns } from '@/hooks/useColumns';
 import { useExtraction } from '@/hooks/useExtraction';
+import { useExtractionPersistence } from '@/hooks/useExtractionPersistence';
+import type { FileUploadResult } from '@/components/FileUploader';
 
 // Dynamic imports로 Step 컴포넌트 lazy loading
-// 각 Step은 사용자가 해당 단계에 도달했을 때만 로드됨
 const UploadTemplateStep = dynamic(() => import('@/components/steps/UploadTemplateStep').then(mod => ({ default: mod.UploadTemplateStep })), {
   loading: () => <div className="flex justify-center items-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-excel-600"></div></div>,
 });
@@ -32,10 +34,63 @@ const ExportStep = dynamic(() => import('@/components/steps/ExportStep').then(mo
   loading: () => <div className="flex justify-center items-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-excel-600"></div></div>,
 });
 
+// 저장 상태 표시 컴포넌트
+function SaveIndicator({ status, lastSaved }: { status: string; lastSaved: Date | null }) {
+  if (status === 'idle') return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 bg-white border border-slate-200 rounded-lg shadow-lg px-4 py-2 flex items-center gap-2 text-sm z-50">
+      {status === 'saving' && (
+        <>
+          <div className="w-3 h-3 border-2 border-excel-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-slate-600">저장 중...</span>
+        </>
+      )}
+      {status === 'saved' && (
+        <>
+          <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="text-slate-600">
+            저장됨 {lastSaved && `(${lastSaved.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })})`}
+          </span>
+        </>
+      )}
+      {status === 'error' && (
+        <>
+          <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span className="text-red-600">저장 실패</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ExtractionPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const extractionIdParam = searchParams.get('id');
+
   const { step, setStep, templateName, setTemplateName, templateFile, setTemplateFile, reset: resetWorkflow } = useWorkflow();
   const { columns, setColumns, newColumnName, setNewColumnName, addColumn, updateColumnName, removeColumn } = useColumns();
   const { items, setItems, isProcessing, handleImageUpload, processImages, handleCellChange, retryFailed, getProgress } = useExtraction(columns, setStep);
+
+  // 저장 관련 훅
+  const {
+    extractionId,
+    setExtractionId,
+    saveState,
+    createExtraction,
+    updateExtraction,
+    addImageUrls,
+    updateStatus,
+    saveResultData,
+    updateCreditsUsed,
+    loadExtraction,
+    reset: resetPersistence,
+  } = useExtractionPersistence({ debounceMs: 500 });
 
   const [sampleImage, setSampleImage] = useState<string | null>(null);
   const [isAnalyzingSample, setIsAnalyzingSample] = useState(false);
@@ -44,10 +99,112 @@ export default function ExtractionPage() {
     headerRowIndex: number;
     confidence: number;
   } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [creditsUsed, setCreditsUsed] = useState(0);
+  const [templateFileUrl, setTemplateFileUrl] = useState<string | null>(null);
+  const [savedTemplates, setSavedTemplates] = useState<Array<{ id: string; name: string; columnCount: number }>>([]);
 
-  const handleTemplateUpload = async (files: File[] | import('@/components/FileUploader').FileUploadResult[]) => {
-    // File[] 또는 FileUploadResult[]에서 첫 번째 파일 추출
-    const file = files[0] instanceof File ? files[0] : (files[0] as import('@/components/FileUploader').FileUploadResult).file;
+  // 템플릿 목록 로드
+  useEffect(() => {
+    const loadTemplates = async () => {
+      const response = await fetch('/api/templates');
+      if (response.ok) {
+        const templates = await response.json();
+        setSavedTemplates(templates.map((t: { id: string; name: string; columns?: ExcelColumn[] }) => ({
+          id: t.id,
+          name: t.name,
+          columnCount: t.columns?.length || 0
+        })));
+      }
+    };
+    loadTemplates();
+  }, []);
+
+  // URL에서 extraction ID 로드 (이어하기)
+  useEffect(() => {
+    const loadExistingExtraction = async () => {
+      if (extractionIdParam && !extractionId) {
+        setIsLoading(true);
+        try {
+          const extraction = await loadExtraction(extractionIdParam);
+          if (extraction) {
+            // extraction 데이터로 상태 복원
+            setImageUrls(extraction.image_urls || []);
+
+            // result_data에서 columns 복원
+            const resultData = extraction.result_data as { columns?: ExcelColumn[]; rows?: Record<string, string | number>[] } | null;
+            if (resultData?.columns) {
+              setColumns(resultData.columns);
+            }
+
+            // templates 관계에서 컬럼 복원 (fallback)
+            const templateData = (extraction as { templates?: { columns?: ExcelColumn[] } }).templates;
+            if (!resultData?.columns && templateData?.columns) {
+              setColumns(templateData.columns);
+            }
+
+            // 기존 결과 데이터 복원 (result_data.rows가 있으면 items로 변환)
+            if (resultData?.rows && resultData.rows.length > 0) {
+              // 각 row를 하나의 item으로 복원 (이미지 URL이 없어도 데이터는 복원)
+              const restoredItems = resultData.rows.map((row, index) => {
+                const imageUrl = extraction.image_urls?.[index];
+                return {
+                  id: `restored_${index}`,
+                  originalImage: imageUrl || '', // 이미지 URL이 없으면 빈 문자열
+                  r2Url: imageUrl,
+                  data: [row], // 각 row를 배열로 감싸서 저장
+                  status: 'completed' as const,
+                };
+              });
+              setItems(restoredItems);
+            } else if (extraction.image_urls && extraction.image_urls.length > 0) {
+              // rows가 없고 image_urls만 있는 경우
+              const restoredItems = extraction.image_urls.map((url, index) => ({
+                id: `restored_${index}`,
+                originalImage: url,
+                r2Url: url,
+                data: [],
+                status: 'pending' as const,
+              }));
+              setItems(restoredItems);
+            }
+
+            // 이어하기: 항상 2단계(DEFINE_COLUMNS)부터 시작
+            // columns가 있으면 사용자가 바로 확인하고 다음 단계로 진행 가능
+            setStep(AppStep.DEFINE_COLUMNS);
+          }
+        } catch (error) {
+          console.error('Failed to load extraction:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadExistingExtraction();
+  }, [extractionIdParam, extractionId, loadExtraction, setColumns, setItems, setStep]);
+
+  // 결과 데이터 자동 저장 (items 또는 columns 변경 시)
+  useEffect(() => {
+    if (extractionId && items.length > 0 && columns.length > 0) {
+      const completedItems = items.filter(i => i.status === 'completed');
+      if (completedItems.length > 0) {
+        saveResultData(items, columns);
+      }
+    }
+  }, [extractionId, items, columns, saveResultData]);
+
+  // URL에 extraction ID 추가
+  const updateUrlWithExtractionId = useCallback((id: string) => {
+    const newUrl = `/extraction?id=${id}`;
+    router.replace(newUrl, { scroll: false });
+  }, [router]);
+
+  const handleTemplateUpload = async (files: File[] | FileUploadResult[]) => {
+    const firstFile = files[0];
+    const file = firstFile instanceof File ? firstFile : firstFile.file;
+    const uploadedUrl = firstFile instanceof File ? undefined : firstFile.uploadedUrl;
 
     if (file) {
       try {
@@ -55,6 +212,9 @@ export default function ExtractionPage() {
         setColumns(cols);
         setTemplateName(file.name);
         setTemplateFile(file);
+        if (uploadedUrl) {
+          setTemplateFileUrl(uploadedUrl);
+        }
         setStep(AppStep.DEFINE_COLUMNS);
       } catch {
         alert("Failed to parse Excel file. Please ensure it is a valid .xlsx file.");
@@ -65,12 +225,69 @@ export default function ExtractionPage() {
   const handleStartWithoutTemplate = () => {
     setTemplateName('Auto-generated Schema');
     setTemplateFile(null);
+    setTemplateFileUrl(null);
     setStep(AppStep.DEFINE_COLUMNS);
   };
 
-  const handleSampleUpload = async (files: File[] | import('@/components/FileUploader').FileUploadResult[]) => {
-    // File[] 또는 FileUploadResult[]에서 첫 번째 파일 추출
-    const file = files[0] instanceof File ? files[0] : (files[0] as import('@/components/FileUploader').FileUploadResult).file;
+  // 템플릿 저장 핸들러
+  const handleSaveAsTemplate = async (name: string) => {
+    try {
+      const response = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          columns,
+          original_file_url: templateFileUrl
+        })
+      });
+
+      if (response.ok) {
+        // 성공 피드백
+        alert('템플릿이 성공적으로 저장되었습니다.');
+
+        // 템플릿 목록 다시 로드
+        const templatesResponse = await fetch('/api/templates');
+        if (templatesResponse.ok) {
+          const templates = await templatesResponse.json();
+          setSavedTemplates(templates.map((t: { id: string; name: string; columns?: ExcelColumn[] }) => ({
+            id: t.id,
+            name: t.name,
+            columnCount: t.columns?.length || 0
+          })));
+        }
+      } else {
+        alert('템플릿 저장에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to save template:', error);
+      alert('템플릿 저장 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 템플릿 선택 핸들러
+  const handleSelectTemplate = async (templateId: string) => {
+    try {
+      const response = await fetch(`/api/templates/${templateId}`);
+      if (response.ok) {
+        const template = await response.json();
+        setColumns(template.columns || []);
+        setTemplateName(template.name);
+        setTemplateFile(null);
+        setTemplateFileUrl(template.original_file_url || null);
+        setStep(AppStep.DEFINE_COLUMNS);
+      } else {
+        alert('템플릿을 불러오는데 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to load template:', error);
+      alert('템플릿 불러오기 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleSampleUpload = async (files: File[] | FileUploadResult[]) => {
+    const firstFile = files[0];
+    const file = firstFile instanceof File ? firstFile : firstFile.file;
 
     if (file) {
       const reader = new FileReader();
@@ -79,20 +296,16 @@ export default function ExtractionPage() {
         setSampleImage(base64);
         setIsAnalyzingSample(true);
 
-        // PDF인지 확인 (헤더 행 감지는 Excel 이미지에만 필요)
         const isPdf = file.type === 'application/pdf' || base64.startsWith('data:application/pdf');
-
         setSampleError(null);
 
         try {
           let detectedHeaders: string[];
 
           if (isPdf) {
-            // PDF는 컬럼 식별만 수행 (헤더 행 감지 불필요)
             detectedHeaders = await identifyColumnsFromImage(base64);
             setHeaderDetection(null);
           } else {
-            // 이미지는 병렬로 헤더 감지 및 컬럼 식별 실행
             const [headerResult, headers] = await Promise.all([
               detectHeaderRow(base64),
               identifyColumnsFromImage(base64)
@@ -100,7 +313,6 @@ export default function ExtractionPage() {
 
             detectedHeaders = headers;
 
-            // 헤더 감지 결과 저장
             if (headerResult.confidence > 0) {
               setHeaderDetection({
                 headerRowIndex: headerResult.headerRowIndex,
@@ -121,6 +333,9 @@ export default function ExtractionPage() {
             data: [],
             status: 'pending'
           }]);
+
+          // 크레딧 사용 추적
+          setCreditsUsed(prev => prev + 1);
         } catch (error) {
           console.error('Sample analysis error:', error);
           setSampleError(error instanceof Error ? error.message : 'Failed to analyze document');
@@ -141,26 +356,165 @@ export default function ExtractionPage() {
     }
   };
 
-  const confirmColumns = () => {
+  // Step 2 완료: extraction 레코드 생성
+  const confirmColumns = async () => {
     if (columns.length === 0) {
       alert("Please define at least one column.");
       return;
     }
+
+    // extraction 레코드가 없으면 생성
+    if (!extractionId) {
+      const newId = await createExtraction({
+        image_urls: [],
+      });
+
+      if (newId) {
+        updateUrlWithExtractionId(newId);
+      }
+    }
+
     setStep(AppStep.UPLOAD_IMAGES);
   };
 
+  // Step 3: 이미지 업로드 핸들러 (R2 URL 저장)
+  const handleImageUploadWithPersistence = async (files: File[] | FileUploadResult[]) => {
+    // 기존 핸들러 호출
+    handleImageUpload(files);
+
+    // R2 URL 수집
+    const newUrls: string[] = [];
+    for (const f of files) {
+      if (!(f instanceof File) && f.uploadedUrl) {
+        newUrls.push(f.uploadedUrl);
+      }
+    }
+
+    if (newUrls.length > 0 && extractionId) {
+      const updatedUrls = await addImageUrls(newUrls, imageUrls);
+      if (updatedUrls) {
+        setImageUrls(updatedUrls);
+      }
+    }
+  };
+
+  // Step 4: AI 처리 시작
+  const handleProcessImages = async () => {
+    if (extractionId) {
+      await updateStatus('processing');
+    }
+
+    await processImages();
+
+    // 처리 완료 후 상태 업데이트
+    if (extractionId) {
+      const processedCount = items.filter(i => i.status === 'completed' || i.status === 'error').length;
+      await updateCreditsUsed(creditsUsed + processedCount);
+      await updateStatus('completed');
+    }
+  };
+
+  // Step 4: 셀 변경 핸들러 (자동 저장)
+  const handleCellChangeWithPersistence = (itemId: string, rowIndex: number, key: string, value: string) => {
+    handleCellChange(itemId, rowIndex, key, value);
+    // saveResultData는 useEffect에서 자동 호출됨 (debounce)
+  };
+
+  const [exportedFileUrl, setExportedFileUrl] = useState<string | null>(null);
+  const [isUploadingToR2, setIsUploadingToR2] = useState(false);
+
   const handleExport = async () => {
     const exportRows = items.flatMap(item => item.data);
+
+    // 1. 로컬 다운로드 실행
     await generateExcelFile(columns, exportRows, templateFile || undefined);
+
+    // 2. Export 단계로 이동
     setStep(AppStep.EXPORT);
+
+    // 3. R2에 업로드 (비동기로 진행)
+    try {
+      setIsUploadingToR2(true);
+
+      // Blob 생성
+      const { generateExcelBlob } = await import('@/services/excelService');
+      const blob = await generateExcelBlob(columns, exportRows, templateFile || undefined);
+
+      // 파일명 생성 (extraction_YYYY-MM-DD_HHmmss.xlsx)
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
+      const filename = `extraction_${dateStr}_${timeStr}.xlsx`;
+
+      // File 객체 생성
+      const file = new File([blob], filename, {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+
+      // R2 업로드
+      const presignedResponse = await fetch('/api/storage/presigned-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          folder: 'exports',
+        }),
+      });
+
+      if (presignedResponse.ok) {
+        const { uploadUrl, publicUrl } = await presignedResponse.json();
+
+        // R2에 직접 업로드
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        });
+
+        if (uploadResponse.ok) {
+          setExportedFileUrl(publicUrl);
+
+          // extraction 레코드에 exported_file_url 저장
+          if (extractionId) {
+            await updateExtractionImmediate(extractionId, {
+              exported_file_url: publicUrl,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to upload to R2:', error);
+      // R2 업로드 실패는 무시 (로컬 다운로드는 이미 완료됨)
+    } finally {
+      setIsUploadingToR2(false);
+    }
   };
 
   const reset = () => {
     resetWorkflow();
+    resetPersistence();
     setColumns([]);
     setItems([]);
     setSampleImage(null);
+    setImageUrls([]);
+    setCreditsUsed(0);
+    setTemplateFileUrl(null);
+    setExportedFileUrl(null);
+    setIsUploadingToR2(false);
+    router.replace('/extraction', { scroll: false });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-24">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-excel-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">작업을 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -170,6 +524,8 @@ export default function ExtractionPage() {
         <UploadTemplateStep
           onTemplateUpload={handleTemplateUpload}
           onStartWithoutTemplate={handleStartWithoutTemplate}
+          savedTemplates={savedTemplates}
+          onSelectTemplate={handleSelectTemplate}
         />
       )}
 
@@ -194,6 +550,7 @@ export default function ExtractionPage() {
           setNewColumnName={setNewColumnName}
           headerDetection={headerDetection || undefined}
           onHeaderRowChange={handleHeaderRowChange}
+          onSaveAsTemplate={handleSaveAsTemplate}
         />
       )}
 
@@ -201,8 +558,8 @@ export default function ExtractionPage() {
         <UploadImagesStep
           items={items}
           isProcessing={isProcessing}
-          onImageUpload={handleImageUpload}
-          onProcessImages={processImages}
+          onImageUpload={handleImageUploadWithPersistence}
+          onProcessImages={handleProcessImages}
           progress={getProgress()}
           onRetryFailed={retryFailed}
         />
@@ -213,7 +570,7 @@ export default function ExtractionPage() {
           columns={columns}
           items={items}
           templateName={templateName}
-          onCellChange={handleCellChange}
+          onCellChange={handleCellChangeWithPersistence}
           onExport={handleExport}
         />
       )}
@@ -221,9 +578,14 @@ export default function ExtractionPage() {
       {step === AppStep.EXPORT && (
         <ExportStep
           templateFile={templateFile}
+          exportedFileUrl={exportedFileUrl}
+          isUploadingToR2={isUploadingToR2}
           onReset={reset}
         />
       )}
+
+      {/* 저장 상태 표시 */}
+      <SaveIndicator status={saveState.status} lastSaved={saveState.lastSaved} />
     </div>
   );
 }

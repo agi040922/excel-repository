@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { HistoryList } from '@/components/dashboard/HistoryList';
+import { HistoryPageClient } from '@/components/dashboard/HistoryPageClient';
 
 // 상대 시간 계산 함수
 function getRelativeTime(date: Date): string {
@@ -17,6 +17,13 @@ function getRelativeTime(date: Date): string {
   return date.toLocaleDateString('ko-KR');
 }
 
+// result_data 타입 정의
+interface ResultData {
+  rows?: Array<Record<string, string | number>>;
+  columns?: Array<{ key: string; header: string }>;
+  metadata?: { total_images?: number; processed_images?: number; average_confidence?: number };
+}
+
 export default async function HistoryPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -30,6 +37,12 @@ export default async function HistoryPage() {
     rowsExtracted: number;
   }> = [];
 
+  let extractionData: Array<{
+    id: string;
+    result_data: ResultData | null;
+    exported_file_url: string | null;
+  }> = [];
+
   if (user) {
     // 추출 이력 조회 (템플릿 정보 포함)
     const { data: extractions } = await supabase
@@ -39,6 +52,7 @@ export default async function HistoryPage() {
         status,
         image_urls,
         result_data,
+        exported_file_url,
         created_at,
         template_id,
         templates (name)
@@ -47,6 +61,14 @@ export default async function HistoryPage() {
       .order('created_at', { ascending: false });
 
     if (extractions) {
+      // 다운로드용 추출 데이터
+      extractionData = extractions.map(ext => ({
+        id: ext.id,
+        result_data: ext.result_data as ResultData | null,
+        exported_file_url: (ext.exported_file_url as string) || null,
+      }));
+
+      // UI 표시용 히스토리 데이터
       history = extractions.map(ext => {
         // 템플릿 데이터 처리
         const templateData = ext.templates as { name: string } | { name: string }[] | null;
@@ -54,9 +76,14 @@ export default async function HistoryPage() {
           ? templateData[0]?.name
           : templateData?.name;
 
-        // result_data에서 추출된 행 수 계산
-        const resultData = ext.result_data as Array<Record<string, unknown>> | null;
-        const rowsExtracted = resultData?.length || 0;
+        // result_data 구조 파싱
+        const resultData = ext.result_data as ResultData | null;
+
+        // 추출된 행 수 계산 (result_data.rows 배열 길이)
+        const rowsExtracted = resultData?.rows?.length || 0;
+
+        // 이미지 수: image_urls 우선, 없으면 metadata.total_images 사용
+        const imageCount = ext.image_urls?.length || resultData?.metadata?.total_images || 0;
 
         // status 변환 (failed -> error for UI consistency)
         let displayStatus: 'completed' | 'pending' | 'error' = 'pending';
@@ -71,7 +98,7 @@ export default async function HistoryPage() {
         return {
           id: ext.id,
           templateName: templateName || '템플릿 없음',
-          imageCount: ext.image_urls?.length || 0,
+          imageCount,
           date: getRelativeTime(new Date(ext.created_at)),
           status: displayStatus,
           rowsExtracted,
@@ -80,5 +107,5 @@ export default async function HistoryPage() {
     }
   }
 
-  return <HistoryList history={history} />;
+  return <HistoryPageClient history={history} extractions={extractionData} />;
 }

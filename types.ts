@@ -6,6 +6,8 @@ export interface ExcelColumn {
 export interface ExtractedData {
   id: string;
   originalImage: string; // Base64
+  r2Url?: string; // R2 public URL
+  r2Key?: string; // R2 storage key
   data: Record<string, string | number>[]; // Changed to Array to support multiple rows per image
   status: 'pending' | 'processing' | 'completed' | 'error';
   confidence?: string;

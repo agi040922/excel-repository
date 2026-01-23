@@ -49,6 +49,8 @@ export const useExtraction = (columns: ExcelColumn[], setStep: (step: AppStep) =
           newItems.push({
             id: Math.random().toString(36).substr(2, 9),
             originalImage: readerResult,
+            r2Url: result.uploadedUrl, // R2 URL 저장
+            r2Key: result.key, // R2 키 저장
             data: [],
             status: 'pending'
           });

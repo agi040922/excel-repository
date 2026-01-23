@@ -43,6 +43,7 @@ export interface Extraction {
   result_data: ExtractionResultData | null // JSONB
   credits_used: number
   error_message: string | null
+  exported_file_url: string | null // Export된 Excel 파일의 R2 URL
   created_at: string // ISO 8601 timestamp
 }
 

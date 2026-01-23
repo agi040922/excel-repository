@@ -3,6 +3,7 @@
 import { ExcelColumn } from '@/types';
 import { PdfIcon } from '@/components/icons';
 import type { FileUploadResult } from '@/components/FileUploader';
+import { useState } from 'react';
 
 interface DefineColumnsStepProps {
   columns: ExcelColumn[];
@@ -23,6 +24,7 @@ interface DefineColumnsStepProps {
     confidence: number;
   };
   onHeaderRowChange?: (rowIndex: number) => void;
+  onSaveAsTemplate?: (name: string) => Promise<void>;
 }
 
 const isPdf = (base64: string) => base64.startsWith('data:application/pdf');
@@ -43,7 +45,23 @@ export const DefineColumnsStep: React.FC<DefineColumnsStepProps> = ({
   setNewColumnName,
   headerDetection,
   onHeaderRowChange,
+  onSaveAsTemplate,
 }) => {
+  const [templateSaveName, setTemplateSaveName] = useState('');
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+
+  const handleSaveAsTemplate = async () => {
+    if (!templateSaveName.trim() || !onSaveAsTemplate) return;
+
+    setIsSavingTemplate(true);
+    try {
+      await onSaveAsTemplate(templateSaveName.trim());
+      setTemplateSaveName('');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
       <div className="text-center mb-6">
@@ -189,6 +207,26 @@ export const DefineColumnsStep: React.FC<DefineColumnsStepProps> = ({
                   Add
                 </button>
               </form>
+
+              {/* 템플릿으로 저장 */}
+              {onSaveAsTemplate && columns.length > 0 && (
+                <div className="flex items-center gap-2 mb-4 pb-4 border-b border-slate-100">
+                  <input
+                    type="text"
+                    placeholder="템플릿 이름 (예: 영수증 양식)"
+                    value={templateSaveName}
+                    onChange={(e) => setTemplateSaveName(e.target.value)}
+                    className="flex-grow px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-excel-500 focus:ring-1 focus:ring-excel-500"
+                  />
+                  <button
+                    onClick={handleSaveAsTemplate}
+                    disabled={!templateSaveName.trim() || isSavingTemplate}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                  >
+                    {isSavingTemplate ? '저장 중...' : '템플릿 저장'}
+                  </button>
+                </div>
+              )}
 
               <div className="flex gap-3">
                 {sampleImage ? (
