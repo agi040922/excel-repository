@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import { sanitizeFilename } from '@/lib/utils/filename';
 
 /**
  * R2 업로드 결과를 포함한 콜백 타입
@@ -51,7 +52,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            filename: file.name,
+            filename: sanitizeFilename(file.name),
             contentType: file.type,
             folder: r2Folder,
           }),
@@ -61,7 +62,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           throw new Error('Failed to get presigned URL');
         }
 
-        const { uploadUrl, key, publicUrl } = await presignedResponse.json();
+        const response = await presignedResponse.json();
+        const { uploadUrl, key, publicUrl } = response.data;
 
         // R2에 직접 업로드
         const uploadResponse = await fetch(uploadUrl, {

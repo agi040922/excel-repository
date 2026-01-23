@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { PresignedUrlResponse, R2UploadState, R2UploadResult } from '@/types/r2';
+import { sanitizeFilename } from '@/lib/utils/filename';
 
 /**
  * R2 파일 업로드 커스텀 훅
@@ -44,7 +45,7 @@ export function useR2Upload() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          filename: file.name,
+          filename: sanitizeFilename(file.name),
           contentType: file.type,
           folder,
         }),
@@ -62,8 +63,8 @@ export function useR2Upload() {
         throw new Error('업로드 URL을 가져오는데 실패했습니다');
       }
 
-      const { uploadUrl, key, publicUrl }: PresignedUrlResponse =
-        await presignedResponse.json();
+      const response = await presignedResponse.json();
+      const { uploadUrl, key, publicUrl }: PresignedUrlResponse = response.data;
 
       // Step 2: R2에 직접 파일 업로드 (XMLHttpRequest로 진행률 추적)
       await new Promise<void>((resolve, reject) => {

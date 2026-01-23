@@ -11,6 +11,7 @@ import { useWorkflow } from '@/hooks/useWorkflow';
 import { useColumns } from '@/hooks/useColumns';
 import { useExtraction } from '@/hooks/useExtraction';
 import { useExtractionPersistence } from '@/hooks/useExtractionPersistence';
+import { sanitizeFilename } from '@/lib/utils/filename';
 import type { FileUploadResult } from '@/components/FileUploader';
 
 // Dynamic imports로 Step 컴포넌트 lazy loading
@@ -287,6 +288,8 @@ export default function ExtractionPage() {
   const handleSampleUpload = async (files: File[] | FileUploadResult[]) => {
     const firstFile = files[0];
     const file = firstFile instanceof File ? firstFile : firstFile.file;
+    // R2 URL (FileUploadResult에서 가져오거나 직접 업로드)
+    let r2Url: string | undefined = !(firstFile instanceof File) ? firstFile.uploadedUrl : undefined;
 
     if (file) {
       const reader = new FileReader();
@@ -299,6 +302,36 @@ export default function ExtractionPage() {
         setSampleError(null);
 
         try {
+          // R2에 파일 업로드 (아직 업로드 안됐으면)
+          if (!r2Url) {
+            try {
+              const presignedResponse = await fetch('/api/storage/presigned-upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  filename: sanitizeFilename(file.name),
+                  contentType: file.type,
+                  folder: 'extractions',
+                }),
+              });
+              if (presignedResponse.ok) {
+                const presignedData = await presignedResponse.json();
+                const { uploadUrl, publicUrl } = presignedData.data;
+                const uploadResponse = await fetch(uploadUrl, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': file.type },
+                  body: file,
+                });
+                if (uploadResponse.ok) {
+                  r2Url = publicUrl;
+                }
+              }
+            } catch (uploadError) {
+              console.error('R2 upload failed:', uploadError);
+              // R2 업로드 실패해도 계속 진행 (base64로 처리)
+            }
+          }
+
           let detectedHeaders: string[];
 
           if (isPdf) {
@@ -329,9 +362,15 @@ export default function ExtractionPage() {
           setItems([{
             id: Math.random().toString(36).substr(2, 9),
             originalImage: base64,
+            r2Url: r2Url, // R2 URL 저장
             data: [],
             status: 'pending'
           }]);
+
+          // R2 URL을 imageUrls에도 추가
+          if (r2Url) {
+            setImageUrls(prev => [...prev, r2Url!]);
+          }
 
           // 크레딧 사용 추적
           setCreditsUsed(prev => prev + 1);
@@ -462,7 +501,8 @@ export default function ExtractionPage() {
       });
 
       if (presignedResponse.ok) {
-        const { uploadUrl, publicUrl } = await presignedResponse.json();
+        const presignedData = await presignedResponse.json();
+        const { uploadUrl, publicUrl } = presignedData.data;
 
         // R2에 직접 업로드
         const uploadResponse = await fetch(uploadUrl, {
