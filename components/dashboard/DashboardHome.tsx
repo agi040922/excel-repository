@@ -13,7 +13,7 @@ interface DashboardData {
     template: string;
     images: number;
     date: string;
-    status: 'completed' | 'pending' | 'failed';
+    status: 'completed' | 'pending' | 'processing' | 'failed' | 'error';
   }>;
 }
 
@@ -100,17 +100,19 @@ interface RecentActivityProps {
   template: string;
   images: number;
   date: string;
-  status: 'completed' | 'pending' | 'failed';
+  status: 'completed' | 'pending' | 'processing' | 'failed' | 'error';
 }
 
 const RecentActivity: React.FC<RecentActivityProps> = ({ template, images, date, status }) => {
-  const statusConfig = {
+  const statusConfig: Record<string, { bg: string; text: string }> = {
     completed: { bg: 'bg-green-100', text: 'text-green-600' },
     pending: { bg: 'bg-orange-100', text: 'text-orange-600' },
+    processing: { bg: 'bg-blue-100', text: 'text-blue-600' },
     failed: { bg: 'bg-red-100', text: 'text-red-600' },
+    error: { bg: 'bg-red-100', text: 'text-red-600' },
   };
 
-  const config = statusConfig[status];
+  const config = statusConfig[status] || statusConfig.pending;
 
   return (
     <div className="flex items-center space-x-4 p-4 rounded-lg hover:bg-slate-50 transition-colors group cursor-pointer">

@@ -6,6 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Excel Vision AI - A production-ready Next.js 15 SaaS application that automates data entry from blurry photos/documents directly into Excel templates using AI. Features multi-model AI support via Vercel AI Gateway, user authentication, cloud storage, and subscription billing.
 
+## Original Project Reference
+
+이 프로젝트의 원본 출발점:
+- **경로**: `/Users/jeong-gyeonghun/Downloads/excel-vision-ai`
+- **용도**: 오류 발생 시 원본 코드와 비교 참고용
+
+## Test Account
+
+테스트용 계정 정보:
+- **Email**: test@test.com
+- **Password**: 12341234
+
 ## Development Commands
 
 ```bash

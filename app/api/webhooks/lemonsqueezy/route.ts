@@ -6,7 +6,7 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { getWebhookSecret } from '@/lib/lemonsqueezy/client';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
   addCredits,
   updateSubscriptionTier,
@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    // Use admin client to bypass RLS (webhooks don't have user session)
+    const supabase = createAdminClient();
 
     // Handle different event types
     switch (eventName) {
@@ -92,8 +93,8 @@ export async function POST(request: NextRequest) {
         const tier = getTierFromVariantId(variantId);
         if (!tier) break;
 
-        await updateSubscriptionTier(userId, tier, event.data.id);
-        await resetMonthlyCredits(userId, tier);
+        await updateSubscriptionTier(userId, tier, event.data.id, supabase);
+        await resetMonthlyCredits(userId, tier, supabase);
 
         console.log(`Subscription created: ${userId} -> ${tier}`);
         break;
@@ -106,12 +107,14 @@ export async function POST(request: NextRequest) {
 
         if (status === 'cancelled' || status === 'expired') {
           // Downgrade to free tier
-          await updateSubscriptionTier(userId, 'free');
+          await updateSubscriptionTier(userId, 'free', undefined, supabase);
           console.log(`Subscription ${status}: ${userId} -> free`);
         } else if (status === 'active' && variantId) {
           const tier = getTierFromVariantId(variantId);
           if (tier) {
-            await updateSubscriptionTier(userId, tier, event.data.id);
+            await updateSubscriptionTier(userId, tier, event.data.id, supabase);
+            // 플랜 변경 시 크레딧도 갱신
+            await resetMonthlyCredits(userId, tier, supabase);
             console.log(`Subscription updated: ${userId} -> ${tier}`);
           }
         }
@@ -126,7 +129,7 @@ export async function POST(request: NextRequest) {
         const tier = getTierFromVariantId(variantId);
         if (!tier) break;
 
-        await resetMonthlyCredits(userId, tier);
+        await resetMonthlyCredits(userId, tier, supabase);
         console.log(`Credits reset: ${userId} (${tier})`);
         break;
       }
@@ -139,7 +142,7 @@ export async function POST(request: NextRequest) {
         const credits = getCreditsFromVariantId(variantId);
         if (!credits) break;
 
-        await addCredits(userId, credits);
+        await addCredits(userId, credits, supabase);
         console.log(`Credits purchased: ${userId} +${credits}`);
         break;
       }

@@ -30,7 +30,7 @@ export default async function HomePage() {
       template: string;
       images: number;
       date: string;
-      status: 'completed' | 'pending' | 'failed';
+      status: 'completed' | 'pending' | 'processing' | 'failed' | 'error';
     }>,
   };
 
@@ -90,7 +90,7 @@ export default async function HomePage() {
         template: templateName || '템플릿 없음',
         images: ext.image_urls?.length || 0,
         date: getRelativeTime(new Date(ext.created_at)),
-        status: ext.status as 'completed' | 'pending' | 'failed',
+        status: ext.status as 'completed' | 'pending' | 'processing' | 'failed' | 'error',
       };
     }) || [];
 
