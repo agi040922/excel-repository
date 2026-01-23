@@ -197,7 +197,7 @@ export function useExtractionPersistence(options: UseExtractionPersistenceOption
       metadata: {
         total_images: items.length,
         processed_images: items.filter(i => i.status === 'completed').length,
-        average_confidence: items.reduce((acc, item) => acc + (item.confidence || 0), 0) / items.length || 0,
+        average_confidence: items.reduce((acc, item) => acc + (Number(item.confidence) || 0), 0) / items.length || 0,
       },
     };
 

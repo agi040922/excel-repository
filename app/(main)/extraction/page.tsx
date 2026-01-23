@@ -80,10 +80,9 @@ export default function ExtractionPage() {
   // 저장 관련 훅
   const {
     extractionId,
-    setExtractionId,
     saveState,
     createExtraction,
-    updateExtraction,
+    updateExtractionImmediate,
     addImageUrls,
     updateStatus,
     saveResultData,
