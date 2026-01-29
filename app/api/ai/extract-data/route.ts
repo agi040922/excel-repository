@@ -1,5 +1,8 @@
 import { NextRequest } from 'next/server';
 import { extractDataWithAI } from '@/lib/ai/vercel-ai';
+
+// Vercel serverless function 타임아웃 설정 (Pro: 최대 300초)
+export const maxDuration = 300;
 import { successResponse, errorResponse, ErrorCodes, handleApiError } from '@/lib/api/response';
 import { extractDataRequestSchema, safeValidateRequest } from '@/lib/security/validation';
 import { checkRateLimit, RateLimitPresets } from '@/lib/security/rateLimit';

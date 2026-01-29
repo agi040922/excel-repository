@@ -1,8 +1,18 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { NoTemplatesEmptyState } from '@/components/common/EmptyState';
+import { TemplateDetailModal } from './TemplateDetailModal';
+
+interface ExtractionHistory {
+  id: string;
+  date: string;
+  imageCount: number;
+  status: 'completed' | 'pending' | 'error';
+  exportedFileUrl: string | null;
+  imageUrls: string[];
+}
 
 interface Template {
   id: string;
@@ -11,6 +21,10 @@ interface Template {
   lastUsed: string;
   createdAt: string;
   usageCount: number;
+  columns: Array<{ header: string; key: string }>;
+  originalFileUrl: string | null;
+  extractions: ExtractionHistory[];
+  allImageUrls?: string[];
 }
 
 interface TemplateListProps {
@@ -18,7 +32,12 @@ interface TemplateListProps {
   onSelectTemplate?: (template: Template) => void;
 }
 
-interface TemplateCardProps extends Template {
+interface TemplateCardProps {
+  id: string;
+  name: string;
+  columnCount: number;
+  lastUsed: string;
+  usageCount: number;
   onClick: () => void;
 }
 
@@ -27,7 +46,7 @@ const TemplateCard = React.memo<TemplateCardProps>(({
   columnCount,
   lastUsed,
   usageCount,
-  onClick
+  onClick,
 }) => {
   return (
     <button
@@ -81,7 +100,55 @@ const TemplateCard = React.memo<TemplateCardProps>(({
 
 TemplateCard.displayName = 'TemplateCard';
 
-export const TemplateList: React.FC<TemplateListProps> = ({ templates, onSelectTemplate }) => {
+export const TemplateList: React.FC<TemplateListProps> = ({ templates }) => {
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // 선택된 템플릿 상세 정보
+  const selectedTemplate = useMemo(() => {
+    if (!selectedTemplateId) return null;
+    const template = templates.find(t => t.id === selectedTemplateId);
+    if (!template) return null;
+
+    return {
+      id: template.id,
+      name: template.name,
+      columns: template.columns,
+      originalFileUrl: template.originalFileUrl,
+      createdAt: template.createdAt,
+      extractions: template.extractions,
+      allImageUrls: template.allImageUrls || template.extractions.flatMap(e => e.imageUrls),
+    };
+  }, [selectedTemplateId, templates]);
+
+  const handleCardClick = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedTemplateId(null);
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    try {
+      const response = await fetch(`/api/templates/${templateId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // 페이지 새로고침으로 목록 갱신
+        window.location.reload();
+      } else {
+        alert('템플릿 삭제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      alert('템플릿 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -107,14 +174,26 @@ export const TemplateList: React.FC<TemplateListProps> = ({ templates, onSelectT
           {templates.map((template) => (
             <TemplateCard
               key={template.id}
-              {...template}
-              onClick={() => onSelectTemplate?.(template)}
+              id={template.id}
+              name={template.name}
+              columnCount={template.columnCount}
+              lastUsed={template.lastUsed}
+              usageCount={template.usageCount}
+              onClick={() => handleCardClick(template.id)}
             />
           ))}
         </div>
       ) : (
         <NoTemplatesEmptyState onCreateTemplate={() => {}} />
       )}
+
+      {/* Template Detail Modal */}
+      <TemplateDetailModal
+        template={selectedTemplate}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onDelete={handleDeleteTemplate}
+      />
     </div>
   );
 };

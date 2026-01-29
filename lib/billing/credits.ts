@@ -151,8 +151,9 @@ export async function updateSubscriptionTier(
 }
 
 /**
- * Reset monthly credits based on user's subscription tier
- * This should be called when subscription renews
+ * Ensure minimum monthly credits based on user's subscription tier
+ * - If current credits < tier minimum → set to tier minimum
+ * - If current credits >= tier minimum → keep current (preserve purchased credits)
  * @param userId - User ID
  * @param tier - Subscription tier
  * @param supabaseClient - Optional Supabase client (for admin operations)
@@ -164,24 +165,45 @@ export async function resetMonthlyCredits(
 ): Promise<void> {
   const supabase = supabaseClient || (await createClient());
 
-  // Define monthly credits for each tier
+  // Define monthly credits for each tier (minimum guarantee)
   const monthlyCredits: Record<SubscriptionTier, number> = {
     free: 10,
     basic: 200,
     pro: 1000,
   };
 
-  const credits = monthlyCredits[tier];
+  const tierMinimum = monthlyCredits[tier];
 
+  // Get current credits
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('credits')
+    .eq('id', userId)
+    .single();
+
+  if (fetchError || !profile) {
+    console.error('Error fetching current credits:', fetchError);
+    throw new Error('Failed to fetch current credits');
+  }
+
+  const currentCredits = profile.credits;
+
+  // Only update if current credits are below tier minimum
+  if (currentCredits >= tierMinimum) {
+    console.log(`Credits preserved for ${userId}: ${currentCredits} (>= ${tier} minimum ${tierMinimum})`);
+    return;
+  }
+
+  // Set to tier minimum
   const { error } = await supabase
     .from('profiles')
-    .update({ credits })
+    .update({ credits: tierMinimum })
     .eq('id', userId);
 
   if (error) {
-    console.error('Error resetting monthly credits:', error);
-    throw new Error('Failed to reset monthly credits');
+    console.error('Error updating monthly credits:', error);
+    throw new Error('Failed to update monthly credits');
   }
 
-  console.log(`Reset credits for ${userId} to ${credits} (${tier} tier)`);
+  console.log(`Credits updated for ${userId}: ${currentCredits} → ${tierMinimum} (${tier} tier)`);
 }

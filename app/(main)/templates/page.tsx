@@ -17,6 +17,15 @@ function getRelativeTime(date: Date): string {
   return date.toLocaleDateString('ko-KR');
 }
 
+// 날짜 포맷 함수
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 export default async function TemplatesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -28,62 +37,85 @@ export default async function TemplatesPage() {
     lastUsed: string;
     createdAt: string;
     usageCount: number;
+    columns: Array<{ header: string; key: string }>;
+    originalFileUrl: string | null;
+    extractions: Array<{
+      id: string;
+      date: string;
+      imageCount: number;
+      status: 'completed' | 'pending' | 'error';
+      exportedFileUrl: string | null;
+      imageUrls: string[];
+    }>;
   }> = [];
 
   if (user) {
     // 템플릿 목록 조회
     const { data: templatesData } = await supabase
       .from('templates')
-      .select('id, name, columns, created_at, updated_at')
+      .select('id, name, columns, original_file_url, created_at, updated_at')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
 
     if (templatesData) {
-      // 각 템플릿의 사용 횟수와 마지막 사용 시간 조회
       const templateIds = templatesData.map(t => t.id);
 
-      // 템플릿별 사용 횟수 조회
-      const { data: usageCounts } = await supabase
+      // 템플릿별 추출 이력 조회 (상세 정보 포함)
+      const { data: extractionsData } = await supabase
         .from('extractions')
-        .select('template_id')
-        .in('template_id', templateIds);
-
-      // 템플릿별 마지막 사용 시간 조회
-      const { data: lastUsedData } = await supabase
-        .from('extractions')
-        .select('template_id, created_at')
+        .select('id, template_id, status, image_urls, exported_file_url, created_at')
         .in('template_id', templateIds)
         .order('created_at', { ascending: false });
 
-      // 사용 횟수 집계
-      const usageCountMap = new Map<string, number>();
-      usageCounts?.forEach(e => {
-        if (e.template_id) {
-          usageCountMap.set(e.template_id, (usageCountMap.get(e.template_id) || 0) + 1);
-        }
-      });
-
-      // 마지막 사용 시간 집계 (각 템플릿당 가장 최근 것만)
-      const lastUsedMap = new Map<string, string>();
-      lastUsedData?.forEach(e => {
-        if (e.template_id && !lastUsedMap.has(e.template_id)) {
-          lastUsedMap.set(e.template_id, e.created_at);
+      // 템플릿별 추출 이력 그룹화
+      const extractionsByTemplate = new Map<string, typeof extractionsData>();
+      extractionsData?.forEach(ext => {
+        if (ext.template_id) {
+          const existing = extractionsByTemplate.get(ext.template_id) || [];
+          existing.push(ext);
+          extractionsByTemplate.set(ext.template_id, existing);
         }
       });
 
       templates = templatesData.map(t => {
         const columns = t.columns as Array<{ header: string; key: string }> | null;
-        const lastUsedDate = lastUsedMap.get(t.id);
+        const templateExtractions = extractionsByTemplate.get(t.id) || [];
+
+        // 마지막 사용 시간
+        const lastUsedDate = templateExtractions[0]?.created_at;
+
+        // 추출 이력 변환
+        const extractions = templateExtractions.map(ext => {
+          let displayStatus: 'completed' | 'pending' | 'error' = 'pending';
+          if (ext.status === 'completed') displayStatus = 'completed';
+          else if (ext.status === 'failed') displayStatus = 'error';
+
+          return {
+            id: ext.id,
+            date: formatDate(new Date(ext.created_at)),
+            imageCount: ext.image_urls?.length || 0,
+            status: displayStatus,
+            exportedFileUrl: ext.exported_file_url,
+            imageUrls: ext.image_urls || [],
+          };
+        });
+
+        // 모든 이미지 URL 수집
+        const allImageUrls = templateExtractions.flatMap(ext => ext.image_urls || []);
 
         return {
           id: t.id,
           name: t.name,
           columnCount: columns?.length || 0,
+          columns: columns || [],
+          originalFileUrl: t.original_file_url,
           lastUsed: lastUsedDate
             ? getRelativeTime(new Date(lastUsedDate))
             : '사용 기록 없음',
-          createdAt: t.created_at,
-          usageCount: usageCountMap.get(t.id) || 0,
+          createdAt: formatDate(new Date(t.created_at)),
+          usageCount: templateExtractions.length,
+          extractions,
+          allImageUrls,
         };
       });
     }

@@ -1,5 +1,5 @@
 import { gateway } from '@ai-sdk/gateway';
-import { generateObject } from 'ai';
+import { generateObject, streamObject } from 'ai';
 import { z } from 'zod';
 import { ExcelColumn } from '@/types';
 
@@ -96,7 +96,7 @@ export async function identifyColumnsWithAI(
   return result.object.headers;
 }
 
-// 데이터 추출
+// 데이터 추출 (스트리밍 + no-schema 모드로 유연하게 처리)
 export async function extractDataWithAI(
   imageBase64: string,
   columns: ExcelColumn[],
@@ -109,29 +109,31 @@ export async function extractDataWithAI(
     Extract ALL data rows from this document strictly matching these headers: ${JSON.stringify(headers)}.
 
     Rules:
-    1. Return a JSON array of objects. Each object represents one row of data.
-    2. If the document contains a table with multiple items, extract EACH item as a separate object.
-    3. If the document contains a single form, return an array with one object.
-    4. Keys must match the headers EXACTLY.
-    5. If a field is not found, use an empty string "".
-    6. For date fields, use YYYY-MM-DD format.
-    7. For numeric fields, return numbers (remove currency symbols like $ or ,).
-    8. IMPORTANT: Preserve the original language of the data. Do NOT translate any text values.
+    1. Return a JSON object with a "data" key containing an array of objects.
+    2. Each object represents one row of data.
+    3. If the document contains a table with multiple items, extract EACH item as a separate object.
+    4. If the document contains a single form, return an array with one object.
+    5. Keys must match the headers EXACTLY.
+    6. If a field is not found, use an empty string "".
+    7. For date fields, use YYYY-MM-DD format.
+    8. For numeric fields, return as STRING (e.g., "12345" not 12345).
+    9. IMPORTANT: Preserve the original language of the data. Do NOT translate any text values.
+
+    Example output format:
+    {
+      "data": [
+        {"Header1": "value1", "Header2": "value2"},
+        {"Header1": "value3", "Header2": "value4"}
+      ]
+    }
   `;
 
-  // Dynamic schema based on columns - 정확한 키를 강제
-  const rowShape: Record<string, z.ZodString> = {};
-  headers.forEach(header => {
-    rowShape[header] = z.string().describe(`Value for ${header}`);
-  });
-  const rowSchema = z.object(rowShape);
-  const schema = z.object({
-    data: z.array(rowSchema).describe('Array of extracted data rows')
-  });
+  console.log('[extractDataWithAI] Starting streamObject with no-schema mode...');
 
-  const result = await generateObject({
+  // no-schema 모드로 유연하게 JSON 수신
+  const result = streamObject({
     model,
-    schema,
+    output: 'no-schema',
     messages: [
       {
         role: 'user' as const,
@@ -143,7 +145,69 @@ export async function extractDataWithAI(
     ]
   });
 
-  return result.object.data;
+  // 스트림 소비 (backpressure 방지) + 마지막 객체 캡처
+  let chunkCount = 0;
+  let lastPartialObject: unknown = null;
+  for await (const partialObject of result.partialObjectStream) {
+    chunkCount++;
+    lastPartialObject = partialObject;
+    if (chunkCount % 10 === 0) {
+      console.log(`[extractDataWithAI] Received ${chunkCount} chunks...`);
+    }
+  }
+  console.log(`[extractDataWithAI] Stream complete. Total chunks: ${chunkCount}`);
+
+  // 최종 객체 파싱 시도
+  let finalData: Record<string, string>[] = [];
+
+  try {
+    const finalObject = await result.object;
+    console.log('[extractDataWithAI] Final object type:', typeof finalObject);
+
+    // data 배열 추출
+    if (finalObject && typeof finalObject === 'object' && 'data' in finalObject) {
+      const rawData = (finalObject as { data: unknown[] }).data;
+      if (Array.isArray(rawData)) {
+        // 모든 값을 문자열로 변환
+        finalData = rawData.map(row => {
+          const normalizedRow: Record<string, string> = {};
+          if (row && typeof row === 'object') {
+            for (const [key, value] of Object.entries(row as Record<string, unknown>)) {
+              normalizedRow[key] = value != null ? String(value) : '';
+            }
+          }
+          return normalizedRow;
+        });
+      }
+    }
+  } catch (parseError) {
+    console.warn('[extractDataWithAI] Failed to get final object, using last partial:', parseError);
+
+    // fallback: 마지막 partial object 사용
+    if (lastPartialObject && typeof lastPartialObject === 'object' && 'data' in lastPartialObject) {
+      const rawData = (lastPartialObject as { data: unknown[] }).data;
+      if (Array.isArray(rawData)) {
+        finalData = rawData
+          .filter(row => row != null)
+          .map(row => {
+            const normalizedRow: Record<string, string> = {};
+            if (row && typeof row === 'object') {
+              for (const [key, value] of Object.entries(row as Record<string, unknown>)) {
+                normalizedRow[key] = value != null ? String(value) : '';
+              }
+            }
+            return normalizedRow;
+          });
+      }
+    }
+  }
+
+  console.log('[extractDataWithAI] Final data rows:', finalData.length);
+  if (finalData.length > 0) {
+    console.log('[extractDataWithAI] First row sample:', JSON.stringify(finalData[0], null, 2));
+  }
+
+  return finalData;
 }
 
 // 헤더 행 감지

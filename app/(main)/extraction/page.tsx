@@ -73,6 +73,7 @@ export default function ExtractionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const extractionIdParam = searchParams.get('id');
+  const templateIdParam = searchParams.get('templateId');
 
   const { step, setStep, templateName, setTemplateName, templateFile, setTemplateFile, reset: resetWorkflow } = useWorkflow();
   const { columns, setColumns, newColumnName, setNewColumnName, addColumn, updateColumnName, removeColumn } = useColumns();
@@ -184,6 +185,28 @@ export default function ExtractionPage() {
 
     loadExistingExtraction();
   }, [extractionIdParam, extractionId, loadExtraction, setColumns, setItems, setStep]);
+
+  // URL에서 template ID 로드 (템플릿 선택)
+  useEffect(() => {
+    const loadTemplateFromParam = async () => {
+      // extractionIdParam이 있으면 이어하기 모드이므로 템플릿 로드 스킵
+      if (templateIdParam && !extractionIdParam && step === AppStep.UPLOAD_TEMPLATE) {
+        setIsLoading(true);
+        try {
+          await handleSelectTemplate(templateIdParam);
+          // URL에서 templateId 제거 (뒤로가기 시 다시 로드되지 않도록)
+          router.replace('/extraction', { scroll: false });
+        } catch (error) {
+          console.error('Failed to load template:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadTemplateFromParam();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateIdParam, extractionIdParam]);
 
   // 결과 데이터 자동 저장 (items 또는 columns 변경 시)
   useEffect(() => {
