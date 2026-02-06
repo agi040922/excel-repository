@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS profiles (
   avatar_url TEXT,
   credits INT DEFAULT 10 NOT NULL,
   subscription_tier TEXT DEFAULT 'free' NOT NULL CHECK (subscription_tier IN ('free', 'basic', 'pro')),
-  storage_used BIGINT DEFAULT 0,
   subscription_id TEXT,
   subscription_status TEXT,
   current_period_end TIMESTAMPTZ,

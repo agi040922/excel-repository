@@ -4,7 +4,6 @@
 -- Add billing columns to profiles table
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subscription_tier TEXT DEFAULT 'free';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 10;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS storage_used BIGINT DEFAULT 0;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subscription_id TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subscription_status TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP WITH TIME ZONE;

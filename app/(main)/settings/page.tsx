@@ -28,7 +28,6 @@ export default function SettingsPage() {
   const [userData, setUserData] = useState<{
     tier: SubscriptionTier;
     credits: number;
-    storageUsed: number;
     subscriptionStatus?: 'active' | 'cancelled' | 'expired' | 'past_due';
     currentPeriodEnd?: Date;
   } | null>(null);
@@ -61,7 +60,6 @@ export default function SettingsPage() {
         setUserData({
           tier: profile.subscription_tier || 'free',
           credits: profile.credits || 0,
-          storageUsed: profile.storage_used || 0,
           subscriptionStatus: profile.subscription_status,
           currentPeriodEnd: profile.current_period_end
             ? new Date(profile.current_period_end)
@@ -154,17 +152,6 @@ export default function SettingsPage() {
     }
   };
 
-  const getMaxStorage = (tier: SubscriptionTier) => {
-    switch (tier) {
-      case 'basic':
-        return 500 * 1024 * 1024; // 500MB
-      case 'pro':
-        return 2 * 1024 * 1024 * 1024; // 2GB
-      default:
-        return 50 * 1024 * 1024; // 50MB
-    }
-  };
-
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -187,8 +174,6 @@ export default function SettingsPage() {
             <UsageStats
               credits={userData.credits}
               maxCredits={getMaxCredits(userData.tier)}
-              storageUsed={userData.storageUsed}
-              maxStorage={getMaxStorage(userData.tier)}
             />
           </>
         )}

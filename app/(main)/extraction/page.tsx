@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { parseExcelHeaders, generateExcelFile } from '@/services/excelService';
@@ -10,6 +10,7 @@ import { StepIndicator } from '@/components/common/StepIndicator';
 import { useWorkflow } from '@/hooks/useWorkflow';
 import { useColumns } from '@/hooks/useColumns';
 import { useExtraction } from '@/hooks/useExtraction';
+import { usePages } from '@/hooks/usePages';
 import { useExtractionPersistence } from '@/hooks/useExtractionPersistence';
 import { sanitizeFilename } from '@/lib/utils/filename';
 import type { FileUploadResult } from '@/components/FileUploader';
@@ -19,11 +20,19 @@ const UploadTemplateStep = dynamic(() => import('@/components/steps/UploadTempla
   loading: () => <div className="flex justify-center items-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-excel-600"></div></div>,
 });
 
+const UploadFilesStep = dynamic(() => import('@/components/steps/UploadFilesStep').then(mod => ({ default: mod.UploadFilesStep })), {
+  loading: () => <div className="flex justify-center items-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-excel-600"></div></div>,
+});
+
 const DefineColumnsStep = dynamic(() => import('@/components/steps/DefineColumnsStep').then(mod => ({ default: mod.DefineColumnsStep })), {
   loading: () => <div className="flex justify-center items-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-excel-600"></div></div>,
 });
 
-const UploadImagesStep = dynamic(() => import('@/components/steps/UploadImagesStep').then(mod => ({ default: mod.UploadImagesStep })), {
+const SelectPagesStep = dynamic(() => import('@/components/steps/SelectPagesStep').then(mod => ({ default: mod.SelectPagesStep })), {
+  loading: () => <div className="flex justify-center items-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-excel-600"></div></div>,
+});
+
+const ProcessDataStep = dynamic(() => import('@/components/steps/ProcessDataStep').then(mod => ({ default: mod.ProcessDataStep })), {
   loading: () => <div className="flex justify-center items-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-excel-600"></div></div>,
 });
 
@@ -69,7 +78,7 @@ function SaveIndicator({ status, lastSaved }: { status: string; lastSaved: Date 
   );
 }
 
-export default function ExtractionPage() {
+function ExtractionPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const extractionIdParam = searchParams.get('id');
@@ -77,7 +86,18 @@ export default function ExtractionPage() {
 
   const { step, setStep, templateName, setTemplateName, templateFile, setTemplateFile, reset: resetWorkflow } = useWorkflow();
   const { columns, setColumns, newColumnName, setNewColumnName, addColumn, updateColumnName, removeColumn } = useColumns();
-  const { items, setItems, isProcessing, handleImageUpload, processImages, handleCellChange, retryFailed, getProgress } = useExtraction(columns, setStep);
+  const {
+    items, setItems, isProcessing, error: extractionError,
+    initializeFromPages, processImages, handleCellChange, retryFailed, getProgress, resetItems,
+    cancelProcessing
+  } = useExtraction(columns, setStep);
+
+  // 페이지 관리 훅
+  const {
+    pages, isConverting, conversionProgress, addFiles, toggleColumnSelection, toggleExtractSelection,
+    selectAllForExtract, deselectAllForExtract, selectRangeForExtract, removePage, getColumnPages, getExtractPages, resetPages,
+    cancelConversion
+  } = usePages();
 
   // 저장 관련 훅
   const {
@@ -105,6 +125,18 @@ export default function ExtractionPage() {
   const [creditsUsed, setCreditsUsed] = useState(0);
   const [templateFileUrl, setTemplateFileUrl] = useState<string | null>(null);
   const [savedTemplates, setSavedTemplates] = useState<Array<{ id: string; name: string; columnCount: number }>>([]);
+
+  // 페이지 이탈 경고 (새로고침, 탭 닫기, 뒤로가기)
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (step > AppStep.UPLOAD_TEMPLATE) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [step]);
 
   // 템플릿 목록 로드
   useEffect(() => {
@@ -171,9 +203,8 @@ export default function ExtractionPage() {
               setItems(restoredItems);
             }
 
-            // 이어하기: 항상 2단계(DEFINE_COLUMNS)부터 시작
-            // columns가 있으면 사용자가 바로 확인하고 다음 단계로 진행 가능
-            setStep(AppStep.DEFINE_COLUMNS);
+            // 이어하기: 파일 업로드 단계부터 시작
+            setStep(AppStep.UPLOAD_FILES);
           }
         } catch (error) {
           console.error('Failed to load extraction:', error);
@@ -238,7 +269,8 @@ export default function ExtractionPage() {
         if (uploadedUrl) {
           setTemplateFileUrl(uploadedUrl);
         }
-        setStep(AppStep.DEFINE_COLUMNS);
+        // 템플릿 업로드 후 파일 업로드 단계로 이동
+        setStep(AppStep.UPLOAD_FILES);
       } catch {
         alert("Failed to parse Excel file. Please ensure it is a valid .xlsx file.");
       }
@@ -249,7 +281,8 @@ export default function ExtractionPage() {
     setTemplateName('Auto-generated Schema');
     setTemplateFile(null);
     setTemplateFileUrl(null);
-    setStep(AppStep.DEFINE_COLUMNS);
+    // 템플릿 없이 시작 시 파일 업로드 단계로 이동
+    setStep(AppStep.UPLOAD_FILES);
   };
 
   // 템플릿 저장 핸들러
@@ -298,7 +331,8 @@ export default function ExtractionPage() {
         setTemplateName(template.name);
         setTemplateFile(null);
         setTemplateFileUrl(template.original_file_url || null);
-        setStep(AppStep.DEFINE_COLUMNS);
+        // 템플릿 선택 후 파일 업로드 단계로 이동
+        setStep(AppStep.UPLOAD_FILES);
       } else {
         alert('템플릿을 불러오는데 실패했습니다.');
       }
@@ -308,10 +342,125 @@ export default function ExtractionPage() {
     }
   };
 
+  // 파일 업로드 핸들러 (새로운 워크플로우)
+  const handleFilesUpload = async (files: File[] | FileUploadResult[]) => {
+    await addFiles(files);
+  };
+
+  // 파일 업로드 완료 후 다음 단계로 이동
+  const handleUploadFilesNext = async () => {
+    // 컬럼이 이미 있으면 (엑셀에서 추출된 경우) 바로 페이지 선택으로
+    if (columns.length > 0) {
+      // extraction 레코드 생성
+      if (!extractionId) {
+        const newId = await createExtraction({
+          image_urls: pages.map(p => p.sourceFile.r2Url).filter(Boolean) as string[],
+        });
+        if (newId) {
+          updateUrlWithExtractionId(newId);
+        }
+      }
+      setStep(AppStep.SELECT_PAGES);
+      return;
+    }
+
+    // 컬럼이 없으면 컬럼 감지 필요
+    const columnPages = getColumnPages();
+    if (columnPages.length === 0) {
+      alert('컬럼 감지에 사용할 페이지를 최소 1개 선택해주세요.');
+      return;
+    }
+
+    // 먼저 다음 단계로 이동 (UI 블로킹 방지)
+    setStep(AppStep.DEFINE_COLUMNS);
+
+    // 백그라운드에서 컬럼 감지 시작
+    setIsAnalyzingSample(true);
+    setSampleError(null);
+
+    try {
+      const firstPage = columnPages[0];
+      const imageBase64 = firstPage.imageBase64;
+
+      // 컬럼 감지 (백그라운드)
+      const [headerResult, detectedHeaders] = await Promise.all([
+        detectHeaderRow(imageBase64),
+        identifyColumnsFromImage(imageBase64)
+      ]);
+
+      const cols = detectedHeaders.map(h => ({
+        header: h,
+        key: h.toLowerCase().replace(/\s/g, '_')
+      }));
+      setColumns(cols);
+
+      if (headerResult.confidence > 0) {
+        setHeaderDetection({
+          headerRowIndex: headerResult.headerRowIndex,
+          confidence: headerResult.confidence
+        });
+      }
+    } catch (error) {
+      console.error('Column detection error:', error);
+      setSampleError(error instanceof Error ? error.message : '컬럼 감지에 실패했습니다.');
+    } finally {
+      setIsAnalyzingSample(false);
+    }
+  };
+
+  // 컬럼 정의 완료 핸들러
+  const handleConfirmColumns = async () => {
+    if (columns.length === 0) {
+      alert("최소 1개의 컬럼을 정의해주세요.");
+      return;
+    }
+
+    // extraction 레코드가 없으면 생성
+    if (!extractionId) {
+      const newId = await createExtraction({
+        image_urls: pages.map(p => p.sourceFile.r2Url).filter(Boolean) as string[],
+      });
+
+      if (newId) {
+        updateUrlWithExtractionId(newId);
+      }
+    }
+
+    setStep(AppStep.SELECT_PAGES);
+  };
+
+  // 페이지 선택 완료 후 처리 시작
+  const handleConfirmAndProcess = async () => {
+    const extractPages = getExtractPages();
+    if (extractPages.length === 0) {
+      alert('추출할 페이지를 최소 1개 선택해주세요.');
+      return;
+    }
+
+    // 선택된 페이지로 ExtractedData 초기화 (생성된 items 반환)
+    const initializedItems = initializeFromPages(extractPages);
+
+    if (extractionId) {
+      await updateStatus('processing');
+    }
+
+    setStep(AppStep.PROCESS_DATA);
+
+    // 처리 시작 - 생성된 items를 직접 전달 (setState 비동기 문제 해결)
+    await processImages(initializedItems);
+
+    // 처리 완료 후 상태 업데이트
+    if (extractionId) {
+      const processedCount = extractPages.length;
+      await updateCreditsUsed(creditsUsed + processedCount);
+      await updateStatus('completed');
+    }
+  };
+
+  // 샘플 업로드 핸들러 (컬럼 정의 단계에서 추가 업로드)
   const handleSampleUpload = async (files: File[] | FileUploadResult[]) => {
     const firstFile = files[0];
     const file = firstFile instanceof File ? firstFile : firstFile.file;
-    // R2 URL (FileUploadResult에서 가져오거나 직접 업로드)
     let r2Url: string | undefined = !(firstFile instanceof File) ? firstFile.uploadedUrl : undefined;
 
     if (file) {
@@ -351,7 +500,6 @@ export default function ExtractionPage() {
               }
             } catch (uploadError) {
               console.error('R2 upload failed:', uploadError);
-              // R2 업로드 실패해도 계속 진행 (base64로 처리)
             }
           }
 
@@ -381,22 +529,6 @@ export default function ExtractionPage() {
             key: h.toLowerCase().replace(/\s/g, '_')
           }));
           setColumns(cols);
-
-          setItems([{
-            id: Math.random().toString(36).substr(2, 9),
-            originalImage: base64,
-            r2Url: r2Url, // R2 URL 저장
-            data: [],
-            status: 'pending'
-          }]);
-
-          // R2 URL을 imageUrls에도 추가
-          if (r2Url) {
-            setImageUrls(prev => [...prev, r2Url!]);
-          }
-
-          // 크레딧 사용 추적
-          setCreditsUsed(prev => prev + 1);
         } catch (error) {
           console.error('Sample analysis error:', error);
           setSampleError(error instanceof Error ? error.message : 'Failed to analyze document');
@@ -417,72 +549,25 @@ export default function ExtractionPage() {
     }
   };
 
-  // Step 2 완료: extraction 레코드 생성
-  const confirmColumns = async () => {
-    if (columns.length === 0) {
-      alert("Please define at least one column.");
-      return;
-    }
-
-    // extraction 레코드가 없으면 생성
-    if (!extractionId) {
-      const newId = await createExtraction({
-        image_urls: [],
-      });
-
-      if (newId) {
-        updateUrlWithExtractionId(newId);
-      }
-    }
-
-    setStep(AppStep.UPLOAD_IMAGES);
-  };
-
-  // Step 3: 이미지 업로드 핸들러 (R2 URL 저장)
-  const handleImageUploadWithPersistence = async (files: File[] | FileUploadResult[]) => {
-    // 기존 핸들러 호출
-    handleImageUpload(files);
-
-    // R2 URL 수집
-    const newUrls: string[] = [];
-    for (const f of files) {
-      if (!(f instanceof File) && f.uploadedUrl) {
-        newUrls.push(f.uploadedUrl);
-      }
-    }
-
-    if (newUrls.length > 0 && extractionId) {
-      const updatedUrls = await addImageUrls(newUrls, imageUrls);
-      if (updatedUrls) {
-        setImageUrls(updatedUrls);
-      }
-    }
-  };
-
-  // Step 4: AI 처리 시작
-  const handleProcessImages = async () => {
-    if (extractionId) {
-      await updateStatus('processing');
-    }
-
-    await processImages();
-
-    // 처리 완료 후 상태 업데이트
-    if (extractionId) {
-      const processedCount = items.filter(i => i.status === 'completed' || i.status === 'error').length;
-      await updateCreditsUsed(creditsUsed + processedCount);
-      await updateStatus('completed');
-    }
-  };
-
-  // Step 4: 셀 변경 핸들러 (자동 저장)
+  // 셀 변경 핸들러 (자동 저장)
   const handleCellChangeWithPersistence = (itemId: string, rowIndex: number, key: string, value: string) => {
     handleCellChange(itemId, rowIndex, key, value);
-    // saveResultData는 useEffect에서 자동 호출됨 (debounce)
   };
 
   const [exportedFileUrl, setExportedFileUrl] = useState<string | null>(null);
   const [isUploadingToR2, setIsUploadingToR2] = useState(false);
+
+  // 완료된 데이터만 엑셀로 내보내기 (처리 중에도 사용 가능)
+  const handleExportCompleted = async () => {
+    const completedItems = items.filter(item => item.status === 'completed' && item.data.length > 0);
+    if (completedItems.length === 0) {
+      alert('완료된 데이터가 없습니다.');
+      return;
+    }
+
+    const exportRows = completedItems.flatMap(item => item.data);
+    await generateExcelFile(columns, exportRows, templateFile || undefined);
+  };
 
   const handleExport = async () => {
     const exportRows = items.flatMap(item => item.data);
@@ -497,22 +582,18 @@ export default function ExtractionPage() {
     try {
       setIsUploadingToR2(true);
 
-      // Blob 생성
       const { generateExcelBlob } = await import('@/services/excelService');
       const blob = await generateExcelBlob(columns, exportRows, templateFile || undefined);
 
-      // 파일명 생성 (extraction_YYYY-MM-DD_HHmmss.xlsx)
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
       const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
       const filename = `extraction_${dateStr}_${timeStr}.xlsx`;
 
-      // File 객체 생성
       const file = new File([blob], filename, {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       });
 
-      // R2 업로드
       const presignedResponse = await fetch('/api/storage/presigned-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -527,7 +608,6 @@ export default function ExtractionPage() {
         const presignedData = await presignedResponse.json();
         const { uploadUrl, publicUrl } = presignedData.data;
 
-        // R2에 직접 업로드
         const uploadResponse = await fetch(uploadUrl, {
           method: 'PUT',
           headers: { 'Content-Type': file.type },
@@ -537,7 +617,6 @@ export default function ExtractionPage() {
         if (uploadResponse.ok) {
           setExportedFileUrl(publicUrl);
 
-          // extraction 레코드에 exported_file_url 저장
           if (extractionId) {
             await updateExtractionImmediate(extractionId, {
               exported_file_url: publicUrl,
@@ -547,7 +626,6 @@ export default function ExtractionPage() {
       }
     } catch (error) {
       console.error('Failed to upload to R2:', error);
-      // R2 업로드 실패는 무시 (로컬 다운로드는 이미 완료됨)
     } finally {
       setIsUploadingToR2(false);
     }
@@ -556,8 +634,9 @@ export default function ExtractionPage() {
   const reset = () => {
     resetWorkflow();
     resetPersistence();
+    resetPages();
+    resetItems();
     setColumns([]);
-    setItems([]);
     setSampleImage(null);
     setImageUrls([]);
     setCreditsUsed(0);
@@ -566,6 +645,9 @@ export default function ExtractionPage() {
     setIsUploadingToR2(false);
     router.replace('/extraction', { scroll: false });
   };
+
+  // 컬럼 감지용 페이지 이미지 목록
+  const columnPageImages = getColumnPages().map(p => p.imageBase64);
 
   if (isLoading) {
     return (
@@ -591,9 +673,24 @@ export default function ExtractionPage() {
         />
       )}
 
+      {step === AppStep.UPLOAD_FILES && (
+        <UploadFilesStep
+          pages={pages}
+          isConverting={isConverting}
+          conversionProgress={conversionProgress}
+          columns={columns}
+          onFilesUpload={handleFilesUpload}
+          onToggleColumnSelection={toggleColumnSelection}
+          onConfirmAndNext={handleUploadFilesNext}
+          onRemovePage={removePage}
+          onCancelConversion={cancelConversion}
+        />
+      )}
+
       {step === AppStep.DEFINE_COLUMNS && (
         <DefineColumnsStep
           columns={columns}
+          columnPageImages={columnPageImages}
           sampleImage={sampleImage}
           isAnalyzingSample={isAnalyzingSample}
           sampleError={sampleError}
@@ -603,12 +700,13 @@ export default function ExtractionPage() {
           onUpdateColumnName={updateColumnName}
           onRemoveColumn={removeColumn}
           onAddColumn={addColumn}
-          onConfirmColumns={confirmColumns}
+          onConfirmColumns={handleConfirmColumns}
           onCloseSample={() => {
             setSampleImage(null);
             setHeaderDetection(null);
             setSampleError(null);
           }}
+          onBack={() => setStep(AppStep.UPLOAD_FILES)}
           setNewColumnName={setNewColumnName}
           headerDetection={headerDetection || undefined}
           onHeaderRowChange={handleHeaderRowChange}
@@ -616,14 +714,31 @@ export default function ExtractionPage() {
         />
       )}
 
-      {step === AppStep.UPLOAD_IMAGES && (
-        <UploadImagesStep
+      {step === AppStep.SELECT_PAGES && (
+        <SelectPagesStep
+          pages={pages}
+          onToggleExtractSelection={toggleExtractSelection}
+          onSelectAll={selectAllForExtract}
+          onDeselectAll={deselectAllForExtract}
+          onSelectRange={selectRangeForExtract}
+          onConfirmAndProcess={handleConfirmAndProcess}
+          onBack={() => setStep(AppStep.DEFINE_COLUMNS)}
+        />
+      )}
+
+      {step === AppStep.PROCESS_DATA && (
+        <ProcessDataStep
+          pages={pages}
           items={items}
           isProcessing={isProcessing}
-          onImageUpload={handleImageUploadWithPersistence}
-          onProcessImages={handleProcessImages}
           progress={getProgress()}
+          error={extractionError}
           onRetryFailed={retryFailed}
+          onBack={() => setStep(AppStep.SELECT_PAGES)}
+          onBackToColumns={() => setStep(AppStep.DEFINE_COLUMNS)}
+          onCancelProcessing={cancelProcessing}
+          onExportCompleted={handleExportCompleted}
+          onResume={processImages}
         />
       )}
 
@@ -649,5 +764,19 @@ export default function ExtractionPage() {
       {/* 저장 상태 표시 */}
       <SaveIndicator status={saveState.status} lastSaved={saveState.lastSaved} />
     </div>
+  );
+}
+
+// Suspense 바운더리로 감싼 기본 export
+export default function ExtractionPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-excel-600"></div>
+        <p className="mt-4 text-slate-500">로딩 중...</p>
+      </div>
+    }>
+      <ExtractionPageContent />
+    </Suspense>
   );
 }

@@ -9,7 +9,6 @@ export interface PricingPlan {
   name: string;
   price: number;
   credits: number; // Monthly credits
-  storage: string;
   variantId?: string; // LemonSqueezy variant ID
   features: string[];
 }
@@ -20,10 +19,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     name: 'Free',
     price: 0,
     credits: 10,
-    storage: '50MB',
     features: [
       '월 10개 이미지 무료',
-      '50MB 저장 공간',
       '기본 AI 추출',
     ],
   },
@@ -32,11 +29,9 @@ export const PRICING_PLANS: PricingPlan[] = [
     name: 'Basic',
     price: 9,
     credits: 200,
-    storage: '500MB',
     variantId: '1241337',  // LemonSqueezy Test Mode
     features: [
       '월 200개 이미지',
-      '500MB 저장 공간',
       '우선 처리',
       '이메일 지원',
     ],
@@ -46,11 +41,9 @@ export const PRICING_PLANS: PricingPlan[] = [
     name: 'Pro',
     price: 29,
     credits: 1000,
-    storage: '2GB',
     variantId: '1241338',  // LemonSqueezy Test Mode
     features: [
       '월 1000개 이미지',
-      '2GB 저장 공간',
       '최우선 처리',
       '전담 지원',
       'API 접근',
@@ -87,7 +80,6 @@ export interface UserBilling {
   userId: string;
   subscriptionTier: SubscriptionTier;
   credits: number;
-  storageUsed: number; // in bytes
   subscriptionId?: string; // LemonSqueezy subscription ID
   subscriptionStatus?: 'active' | 'cancelled' | 'expired' | 'past_due';
   currentPeriodEnd?: Date;

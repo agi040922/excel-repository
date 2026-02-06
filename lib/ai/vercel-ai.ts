@@ -5,6 +5,7 @@ import { ExcelColumn } from '@/types';
 
 // 지원하는 모델 타입
 export type AIModel =
+  | 'google/gemini-2.5-flash-lite'
   | 'google/gemini-2.5-flash'
   | 'google/gemini-2.5-pro'
   | 'openai/gpt-4o'
@@ -12,8 +13,8 @@ export type AIModel =
   | 'anthropic/claude-sonnet-4-20250514'
   | 'anthropic/claude-3-5-sonnet-20241022';
 
-// 기본 모델 (Gemini Flash - 가장 저렴)
-export const DEFAULT_MODEL: AIModel = 'google/gemini-2.5-flash';
+// 기본 모델 (Gemini Flash Lite - 가장 저렴하고 빠름)
+export const DEFAULT_MODEL: AIModel = 'google/gemini-2.5-flash-lite';
 
 // 모델 선택 함수
 export function getModel(modelId: AIModel = DEFAULT_MODEL) {

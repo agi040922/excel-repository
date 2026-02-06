@@ -7,6 +7,8 @@ import { useState } from 'react';
 
 interface DefineColumnsStepProps {
   columns: ExcelColumn[];
+  /** 컬럼 감지용으로 선택된 페이지 이미지들 */
+  columnPageImages?: string[];
   sampleImage: string | null;
   isAnalyzingSample: boolean;
   sampleError?: string | null;
@@ -18,6 +20,7 @@ interface DefineColumnsStepProps {
   onAddColumn: (e?: React.FormEvent) => void;
   onConfirmColumns: () => void;
   onCloseSample: () => void;
+  onBack?: () => void;
   setNewColumnName: (value: string) => void;
   headerDetection?: {
     headerRowIndex: number;
@@ -31,6 +34,7 @@ const isPdf = (base64: string) => base64.startsWith('data:application/pdf');
 
 export const DefineColumnsStep: React.FC<DefineColumnsStepProps> = ({
   columns,
+  columnPageImages,
   sampleImage,
   isAnalyzingSample,
   sampleError,
@@ -42,11 +46,16 @@ export const DefineColumnsStep: React.FC<DefineColumnsStepProps> = ({
   onAddColumn,
   onConfirmColumns,
   onCloseSample,
+  onBack,
   setNewColumnName,
   headerDetection,
   onHeaderRowChange,
   onSaveAsTemplate,
 }) => {
+  // 표시할 이미지: columnPageImages가 있으면 첫 번째 것, 아니면 sampleImage
+  const displayImage = columnPageImages && columnPageImages.length > 0
+    ? columnPageImages[0]
+    : sampleImage;
   const [templateSaveName, setTemplateSaveName] = useState('');
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
 
@@ -73,31 +82,38 @@ export const DefineColumnsStep: React.FC<DefineColumnsStepProps> = ({
         </p>
       </div>
 
-      <div className={`grid grid-cols-1 ${sampleImage ? 'md:grid-cols-2' : ''} gap-8`}>
+      <div className={`grid grid-cols-1 ${displayImage ? 'md:grid-cols-2' : ''} gap-8`}>
         {/* Left: Image/PDF Preview */}
-        <div className={`border border-slate-200 rounded-xl p-4 bg-white h-fit sticky top-20 ${!sampleImage ? 'hidden' : 'block'}`}>
-          <h3 className="font-semibold text-slate-700 mb-2">Sample Document</h3>
-          {sampleImage && (
-            isPdf(sampleImage) ? (
+        <div className={`border border-slate-200 rounded-xl p-4 bg-white h-fit sticky top-20 ${!displayImage ? 'hidden' : 'block'}`}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-slate-700">Sample Document</h3>
+            {columnPageImages && columnPageImages.length > 1 && (
+              <span className="text-xs text-slate-500">
+                {columnPageImages.length}개 페이지 선택됨
+              </span>
+            )}
+          </div>
+          {displayImage && (
+            isPdf(displayImage) ? (
               <iframe
-                src={sampleImage}
+                src={displayImage}
                 className="w-full aspect-[3/4] rounded-lg border border-slate-200"
                 title="PDF Preview"
               />
             ) : (
-              <img src={sampleImage} alt="sample" className="w-full h-auto rounded-lg shadow-sm" />
+              <img src={displayImage} alt="sample" className="w-full h-auto rounded-lg shadow-sm" />
             )
           )}
         </div>
 
         {/* Right: Field Editor */}
-        <div className={`border border-slate-200 rounded-xl p-6 bg-white flex flex-col ${!sampleImage ? 'w-full md:w-2/3 mx-auto' : ''}`}>
+        <div className={`border border-slate-200 rounded-xl p-6 bg-white flex flex-col ${!displayImage ? 'w-full md:w-2/3 mx-auto' : ''}`}>
           <div className="mb-4 flex justify-between items-center">
             <div>
               <h3 className="font-semibold text-slate-700 text-lg">Target Columns</h3>
               <p className="text-xs text-slate-400">Edit field names to match your needs.</p>
             </div>
-            {!sampleImage && !templateFile && (
+            {!displayImage && !templateFile && (
               <button
                 onClick={() => document.getElementById('sample-upload')?.click()}
                 className="text-sm text-excel-600 hover:text-excel-700 font-medium"
@@ -229,14 +245,22 @@ export const DefineColumnsStep: React.FC<DefineColumnsStepProps> = ({
               )}
 
               <div className="flex gap-3">
-                {sampleImage ? (
+                {onBack && (
+                  <button
+                    onClick={onBack}
+                    className="bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                  >
+                    ← 이전
+                  </button>
+                )}
+                {sampleImage && !columnPageImages ? (
                   <button
                     onClick={onCloseSample}
                     className="flex-1 bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-lg font-medium hover:bg-slate-50 transition-colors"
                   >
                     Close Sample
                   </button>
-                ) : templateFile && (
+                ) : templateFile && !columnPageImages && (
                   <button
                     onClick={() => document.getElementById('sample-upload')?.click()}
                     className="flex-1 bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-lg font-medium hover:bg-slate-50 transition-colors"
@@ -246,7 +270,8 @@ export const DefineColumnsStep: React.FC<DefineColumnsStepProps> = ({
                 )}
                 <button
                   onClick={onConfirmColumns}
-                  className="flex-1 bg-excel-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-excel-700 transition-colors shadow-sm"
+                  disabled={columns.length === 0}
+                  className="flex-1 bg-excel-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-excel-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Confirm & Next
                 </button>

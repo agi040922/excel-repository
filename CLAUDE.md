@@ -74,7 +74,8 @@ LEMONSQUEEZY_WEBHOOK_SECRET=your_webhook_secret
 - **Excel**: XLSX library
 
 ### AI Models (via Vercel AI Gateway)
-- `google/gemini-2.5-flash` (default, cheapest)
+- `google/gemini-2.5-flash-lite` (default, cheapest & fastest)
+- `google/gemini-2.5-flash`
 - `google/gemini-2.5-pro`
 - `openai/gpt-4o`
 - `openai/gpt-4o-mini`
@@ -197,7 +198,7 @@ middleware.ts                    # Auth middleware
 ### AI API Usage Example
 
 ```typescript
-// Default model (gemini-2.5-flash)
+// Default model (gemini-2.5-flash-lite)
 fetch('/api/ai/identify-columns', {
   method: 'POST',
   body: JSON.stringify({ imageBase64 })
